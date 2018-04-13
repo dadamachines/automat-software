@@ -1,0 +1,13 @@
+{
+  "name": "automat-software",
+  "keywords": "dadamachines, automat, midi, music, solenoid, musicmachine, musicrobot",
+  "description": "Standard software for dadamachines – automat controller",
+  "include": "automat-software",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/dadamachines/automat-software.git"
+  },
+  "frameworks": "arduino",
+  "platforms": "*"
+}
