@@ -1,19 +1,4 @@
 // EEPROM replacement Lib find in "Manage Libraries"and here https://github.com/cmaglie/FlashStorage
-/*
-
-V 1.1.2 – Untested user contribution by Justin
-
-V 1.1.0
-
-   Testplan:
-   
-   - Midi Speed
-   - Connect both Din + USB and send a lot of data
-   - Learn simple (single press button -  root node + chromatic up
-   - Learn advanced (double press button - assign all notes in sequence
-   -
-
-*/
 
 #include <FlashAsEEPROM.h>
 #include <MIDI.h>
@@ -296,5 +281,3 @@ void singleclick(void)  {
   statusLED.blink(10, 0, -1); // LED Settings (On Time, Off Time, Count)
   midiLearn.begin(0);
 }
-
-
