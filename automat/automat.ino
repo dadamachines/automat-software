@@ -89,7 +89,7 @@ void loop() {
     }
   }
 
-  if (velocity_program < 2) {
+  if (velocity_program > 0 && velocity_program < 3) {
     // new single pulse width via velocity
     for(int i = 0 ; i < 12 ; i++){
       if(pwm_countdown[i] > 1 ){
@@ -103,7 +103,7 @@ void loop() {
         pwm_countdown[i]=0;
       }
     }
-  } else if (velocity_program == 2) {
+  } else if (velocity_program == 3) {
     // repeating pulse width via velocity
     for(int i = 0 ; i < 12 ; i++){
       if((pwm_countdown[i] == 0) || (pwm_level == 0)) {
@@ -211,10 +211,10 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 
         switch (velocity_program) 
         {
-            case 0:  // strategy from 1.1.0  quadratic
+            case 1:  // strategy from 1.1.0  quadratic
               pwm_countdown[i] = velocity * velocity; // set velocity timer
               break;
-            case 1: // inverse quadratic
+            case 2: // inverse quadratic
               if (velocity < 120)
               {
                  velocity = 120 - velocity;
@@ -225,7 +225,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
                 pwm_countdown[i] = NO_COUNTDOWN;
               }
               break;
-            case 2: // true pwm
+            case 3: // true pwm
               pwm_level[i] = (velocity / VELOCITY_DIVISOR) + 1;
               if(pwm_level[i] > LEVEL_MAX) {
                 pwm_countdown[i] = 0;
@@ -239,7 +239,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
                 pwm_kick[i] = PHASE_KICK;
               }
               break;
-            default: // no velocity control
+            default: // no velocity control == 0
              break;
         }
       }
