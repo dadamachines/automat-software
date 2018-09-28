@@ -17,12 +17,11 @@ typedef struct {
   byte   midiChannels[12];                                // 1-16 or 0 for any
   byte   midiPins[12];                                    // midi notes
   byte   alignfiller[8];                                  // for eeprom support
-  byte   velocityProgram;
 } dataCFG;
 dataCFG nvData;
 
 
-// int velocity_program = 0;
+int velocity_program = 0;
 int pwm_countdown[12];
 int pwm_phase[12];
 int pwm_kick[12];
@@ -90,7 +89,7 @@ void loop() {
     }
   }
 
-  if (nvData.velocityProgram > 0 && nvData.velocityProgram < 3) {
+  if (velocity_program > 0 && velocity_program < 3) {
     // new single pulse width via velocity
     for(int i = 0 ; i < 12 ; i++){
       if(pwm_countdown[i] > 1 ){
@@ -104,7 +103,7 @@ void loop() {
         pwm_countdown[i]=0;
       }
     }
-  } else if (nvData.velocityProgram == 3) {
+  } else if (velocity_program == 3) {
     // repeating pulse width via velocity
     for(int i = 0 ; i < 12 ; i++){
       if((pwm_countdown[i] == 0) || (pwm_level == 0)) {
@@ -188,10 +187,9 @@ void loop() {
 /************************************************************************************************************************************************/
 
 void handleProgramChange(byte channel, byte patch) {
-   if (patch < 4 && patch > 0) {
-      nvData.velocityProgram.write(patch)
-   }else{
-      nvData.velocityProgram.write(0)
+   velocity_program = patch;
+   if (velocity_program > 3 || velocity_program < 0) {
+      velocity_program = 0;
    }
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
 }
@@ -211,7 +209,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
         solenoids.setOutput(i);
 
-        switch (nvData.velocityProgram)
+        switch (velocity_program) 
         {
             case 1:  // strategy from 1.1.0  quadratic
               pwm_countdown[i] = velocity * velocity; // set velocity timer
