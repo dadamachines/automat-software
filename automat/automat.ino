@@ -20,7 +20,6 @@ typedef struct {
 } dataCFG;
 dataCFG nvData;
 
-
 int velocity_program = 0;
 int pwm_countdown[12];
 int pwm_phase[12];
@@ -43,6 +42,7 @@ const int LEVEL_MAX = 12;
 const int VELOCITY_DIVISOR = 10;
 
 FlashStorage(nvStore, dataCFG);
+FlashStorage(velocityStore, int);
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -73,6 +73,14 @@ void setup() {
   midi2.setHandleNoteOff(handleNoteOff);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
+
+  int veloFromFlash = velocityStore.read();
+  // if uninitialized, this value should be read as -1
+  if (veloFromFlash >= 0)
+  {
+    velocity_program = veloFromFlash;
+  }
+  
   statusLED.blink(20, 30, 32);
 }
 
@@ -80,7 +88,6 @@ void loop() {
   midi2.read();
   button.tick();
   statusLED.tick();
-
 
   // handle blinking port on learning in advanced mode
   if(midiLearn.active) {
@@ -187,10 +194,18 @@ void loop() {
 /************************************************************************************************************************************************/
 
 void handleProgramChange(byte channel, byte patch) {
-   velocity_program = patch;
-   if (velocity_program > 3 || velocity_program < 0) {
+
+  int prev_value = velocity_program;
+  
+  velocity_program = patch;
+  if (velocity_program > 3 || velocity_program < 0) {
       velocity_program = 0;
-   }
+  }
+
+  if (velocity_program != prev_value) {
+      velocityStore.write(velocity_program);
+  }
+
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
 }
 
