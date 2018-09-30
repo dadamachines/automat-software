@@ -1,14 +1,4 @@
 // EEPROM replacement Lib find in "Manage Libraries"and here https://github.com/cmaglie/FlashStorage
-/*
-
-   Testplan:
-   - Midi Speed
-   - Connect both Din + USB and send a lot of data
-   - Learn simple (single press button -  root node + chromatic up
-   - Learn advanced (double press button - assign all notes in sequence
-   -
-
-*/
 
 #include <FlashAsEEPROM.h>
 #include <MIDI.h>
@@ -30,7 +20,22 @@ typedef struct {
 } dataCFG;
 dataCFG nvData;
 
+int velocity_program = 0;
+int pwm_countdown[12];
+int pwm_phase[12];
+int pwm_kick[12];
+int pwm_level[12];
+const int COUNTDOWN_START = 14400;
+const int NO_COUNTDOWN = 14401;
+const int PHASE_KICK = 256;
+
+const int PHASE_LIMIT = 32;
+const int DOWN_PHASE_MAX = 13;
+const int LEVEL_MAX = 12;
+const int VELOCITY_DIVISOR = 10;
+
 FlashStorage(nvStore, dataCFG);
+FlashStorage(velocityStore, int);
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -56,10 +61,19 @@ void setup() {
   button.attachClick(singleclick);                      // register button for learnmodes
   solenoids.begin();                                    // start shiftregister
 
+  midi2.setHandleProgramChange(handleProgramChange);
   midi2.setHandleNoteOn(handleNoteOn);                  // add Handler for Din MIDI
   midi2.setHandleNoteOff(handleNoteOff);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
+
+  int veloFromFlash = velocityStore.read();
+  // if uninitialized, this value should be read as -1
+  if (veloFromFlash >= 0)
+  {
+    velocity_program = veloFromFlash;
+  }
+  
   statusLED.blink(20, 30, 32);
 }
 
@@ -75,8 +89,50 @@ void loop() {
     }
   }
 
-
-
+  if (velocity_program > 0 && velocity_program < 3) {
+    // new single pulse width via velocity
+    for(int i = 0 ; i < 12 ; i++){
+      if(pwm_countdown[i] > 1 ){
+          if(pwm_countdown[i] < NO_COUNTDOWN){
+            pwm_countdown[i]--;
+          }
+          continue;
+      }
+      if(pwm_countdown[i] > 0) {
+        solenoids.clearOutput(i);
+        pwm_countdown[i]=0;
+      }
+    }
+  } else if (velocity_program == 3) {
+    // repeating pulse width via velocity
+    for(int i = 0 ; i < 12 ; i++){
+      if((pwm_countdown[i] == 0) || (pwm_level == 0)) {
+          continue;
+      }
+      
+      if(pwm_kick[i] > 0) {
+        pwm_kick[i]--;
+        continue;    
+      }
+      
+      pwm_phase[i]--;
+      pwm_countdown[i]--;
+  
+      if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
+        solenoids.setOutput(i);
+  
+        if (pwm_countdown == 0) {
+          pwm_phase[i] = 0;              
+        }
+        else {
+          pwm_phase[i] = PHASE_LIMIT;      
+        }
+      }
+      else if (pwm_phase[i] == (DOWN_PHASE_MAX - pwm_level[i])) {
+        solenoids.clearOutput(i);
+      }
+    }
+  }
 
   // now handle usb midi and merge with DinMidi callbacks
   midiEventPacket_t rx;
@@ -93,6 +149,9 @@ void loop() {
         case 0x80: // note off
           handleNoteOff(1 + (rx.byte1 & 0xF), rx.byte2, rx.byte3);
           break;
+        case 0xC0: // program change
+          handleProgramChange(1 + (rx.byte1 & 0xF), rx.byte2);
+          break;
       }
     }
   } while (rx.header != 0);
@@ -105,7 +164,21 @@ void loop() {
 /************************************************************************************************************************************************/
 /************************************************************************************************************************************************/
 
+void handleProgramChange(byte channel, byte patch) {
 
+  int prev_value = velocity_program;
+  
+  velocity_program = patch;
+  if (velocity_program > 3 || velocity_program < 0) {
+      velocity_program = 0;
+  }
+
+  if (velocity_program != prev_value) {
+      velocityStore.write(velocity_program);
+  }
+
+  statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
+}
 
 void handleNoteOn(byte channel, byte note, byte velocity) {
   midiLearn.noteOn(channel, note, velocity);
@@ -121,6 +194,40 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
     if (nvData.midiPins[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
         solenoids.setOutput(i);
+
+        switch (velocity_program) 
+        {
+            case 1:  // strategy from 1.1.0  quadratic
+              pwm_countdown[i] = velocity * velocity; // set velocity timer
+              break;
+            case 2: // inverse quadratic
+              if (velocity < 120)
+              {
+                 velocity = 120 - velocity;
+                 pwm_countdown[i] = COUNTDOWN_START - ((velocity * velocity) * 7/ 8);
+              }
+              else
+              {
+                pwm_countdown[i] = NO_COUNTDOWN;
+              }
+              break;
+            case 3: // true pwm
+              pwm_level[i] = (velocity / VELOCITY_DIVISOR) + 1;
+              if(pwm_level[i] > LEVEL_MAX) {
+                pwm_countdown[i] = 0;
+                pwm_phase[i] = 0;
+                pwm_kick[i] = 0;
+                pwm_level[i] = 0;
+              }
+              else {
+                pwm_countdown[i] = COUNTDOWN_START; 
+                pwm_phase[i] = PHASE_LIMIT;
+                pwm_kick[i] = PHASE_KICK;
+              }
+              break;
+            default: // no velocity control == 0
+             break;
+        }
       }
     }
   }
@@ -140,6 +247,10 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
     if (nvData.midiPins[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
         solenoids.clearOutput(i);
+        pwm_countdown[i] = 0;
+        pwm_kick[i] = 0;
+        pwm_phase[i] = 0;
+        pwm_level[i] = 0;
       }
     }
   }
@@ -147,7 +258,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
 
 // Advanced Learn
 void doubleclick() {
-  statusLED.blink(20, 20, -1);  // LED Settings (On Time, Off Time, Count)
+  statusLED.blink(10, 10, -1);  // LED Settings (On Time, Off Time, Count)
   midiLearn.begin(1);
 }
 
@@ -156,5 +267,3 @@ void singleclick(void)  {
   statusLED.blink(10, 0, -1); // LED Settings (On Time, Off Time, Count)
   midiLearn.begin(0);
 }
-
-
