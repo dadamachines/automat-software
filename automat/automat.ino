@@ -29,13 +29,6 @@ const int COUNTDOWN_START = 14400;
 const int NO_COUNTDOWN = 14401;
 const int PHASE_KICK = 256;
 
-/*
-const int PHASE_LIMIT = 64;
-const int DOWN_PHASE_MAX = 30;
-const int LEVEL_MAX = 24;
-const int VELOCITY_DIVISOR = 5;
-*/
-
 const int PHASE_LIMIT = 32;
 const int DOWN_PHASE_MAX = 13;
 const int LEVEL_MAX = 12;
@@ -141,28 +134,6 @@ void loop() {
     }
   }
 
-
-
-/*
-  // constant PWM Out on Output 11
-  static bool flag;
-  static int timer_flag = 5;
-
-  timer_flag--;
-  if(timer_flag==0){
-
-    timer_flag = 2700;
-    
-  flag = !flag;
-  
-  if(flag)  solenoids.setOutput(11);
-   else   solenoids.clearOutput(11);
-  }
-
-*/
-
-
-  
   // now handle usb midi and merge with DinMidi callbacks
   midiEventPacket_t rx;
   do {
