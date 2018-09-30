@@ -15,7 +15,7 @@ const int ACTIVITY_LED = 13;                            // activity led is still
 
 // i2c constants
 // TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
-// so we can mimic its teletype API.
+// so we can mimic its teletype API. Future address will be 0xDA.
 const int AUTOMAT_ADDR = 0x60;
 const int I2C_SET = 0;
 
