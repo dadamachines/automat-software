@@ -16,8 +16,6 @@ const int ACTIVITY_LED = 13;                            // activity led is still
 // i2c constants
 const int AUTOMAT_ADDR = 0x60; // TODO set to 0xDA
 const int I2C_SET = 0;
-const int I2C_GATE_ON = 1;
-const int I2C_GATE_OFF = 2;
 
 // NV Data
 typedef struct {
@@ -281,18 +279,6 @@ void receiveI2CEvent(int l)
         } else {
           solenoids.clearOutput(note);
         }
-      }
-      break;
-    case I2C_GATE_ON:
-      if (l = 3) {
-        char note = Wire.read();
-        solenoids.setOutput(note);
-      }
-      break;
-    case I2C_GATE_OFF:
-      if (l = 3) {
-        char note = Wire.read();
-        solenoids.clearOutput(note);
       }
       break;
   }
