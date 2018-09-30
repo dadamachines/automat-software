@@ -14,7 +14,9 @@ const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shi
 const int ACTIVITY_LED = 13;                            // activity led is still on D13 which is connected to PA17 > which means Pin 9 on MKRZero
 
 // i2c constants
-const int AUTOMAT_ADDR = 0x60; // TODO set to 0xDA
+// TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
+// so we can mimic its teletype API.
+const int AUTOMAT_ADDR = 0x60;
 const int I2C_SET = 0;
 
 // NV Data
