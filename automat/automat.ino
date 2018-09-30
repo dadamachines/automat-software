@@ -5,12 +5,19 @@
 #include <MIDIUSB.h>
 #include <SPI.h>
 #include <OneButton.h>
+#include <Wire.h>
 
 // constants
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
 const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic
 const int ACTIVITY_LED = 13;                            // activity led is still on D13 which is connected to PA17 > which means Pin 9 on MKRZero
+
+// i2c constants
+const int AUTOMAT_ADDR = 0x60; // TODO set to 0xDA
+const int I2C_SET = 0;
+const int I2C_GATE_ON = 1;
+const int I2C_GATE_OFF = 2;
 
 // NV Data
 typedef struct {
@@ -60,6 +67,9 @@ void setup() {
   button.attachDoubleClick(doubleclick);                // register button for learnmodes
   button.attachClick(singleclick);                      // register button for learnmodes
   solenoids.begin();                                    // start shiftregister
+
+  Wire.begin(AUTOMAT_ADDR);                             // join i2c bus
+  Wire.onReceive(receiveI2CEvent);                      // register event
 
   midi2.setHandleProgramChange(handleProgramChange);
   midi2.setHandleNoteOn(handleNoteOn);                  // add Handler for Din MIDI
@@ -253,6 +263,38 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
         pwm_level[i] = 0;
       }
     }
+  }
+}
+
+void receiveI2CEvent(int l)
+{
+  int r = Wire.read();
+  statusLED.blink(1, 2, 1);
+
+  switch (r) {
+    case I2C_SET:
+      if (l = 3) {
+        char note = Wire.read();
+        char velocity = Wire.read();
+        if (velocity > 0) {
+          solenoids.setOutput(note);
+        } else {
+          solenoids.clearOutput(note);
+        }
+      }
+      break;
+    case I2C_GATE_ON:
+      if (l = 3) {
+        char note = Wire.read();
+        solenoids.setOutput(note);
+      }
+      break;
+    case I2C_GATE_OFF:
+      if (l = 3) {
+        char note = Wire.read();
+        solenoids.clearOutput(note);
+      }
+      break;
   }
 }
 
