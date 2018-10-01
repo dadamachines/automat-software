@@ -28,18 +28,18 @@ typedef struct {
 dataCFG nvData;
 
 int velocity_program = 0;
-int pwm_countdown[12];
-int pwm_phase[12];
-int pwm_kick[12];
-int pwm_level[12];
-const int COUNTDOWN_START = 14400;
-const int NO_COUNTDOWN = 14401;
-const int PHASE_KICK = 256;
+int pwm_countdown[12];                                    // This is the total number of loops left where we will execute a PWM
+int pwm_phase[12];                                        // This is a repeating counter of PHASE_LIMIT to 0
+int pwm_kick[12];                                         // An initial loop counter where we leave the output high to overcome inertia in the solenoid
+int pwm_level[12];                                        // A counter that indicates how many loop counts we should leave the output high for.
+const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
+const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
+const int PHASE_KICK = 256;                               // Number of loops where we leave the output high to overcome inertia in the solenoid
 
-const int PHASE_LIMIT = 32;
-const int DOWN_PHASE_MAX = 13;
-const int LEVEL_MAX = 12;
-const int VELOCITY_DIVISOR = 10;
+const int PHASE_LIMIT = 32;                               // The number of loop counts we use to execute a PWM cycle.   If this value is too large, the solendoids will emit an audible noise during PWM
+const int DOWN_PHASE_MAX = 13;                            // The maximum number of loop counts where the output is held low for a PWM cycle
+const int LEVEL_MAX = 12;                                 // Maximum level value for PWM
+const int VELOCITY_DIVISOR = 10;                          // Divide the velocity value (1-127) by this number to the the PWM level
 
 FlashStorage(nvStore, dataCFG);
 FlashStorage(velocityStore, int);
@@ -116,29 +116,39 @@ void loop() {
   } else if (velocity_program == 3) {
     // repeating pulse width via velocity
     for(int i = 0 ; i < 12 ; i++){
-      if((pwm_countdown[i] == 0) || (pwm_level == 0)) {
+      // If the user has used a very high velocity, we will bypass PWM
+      // Also, we will set a limit of pwm_countdown time to not keep the PWM on 
+      //  once the solenoid has made contact with the drum, etc.
+      if((pwm_countdown[i] == 0) || (pwm_level[i] == 0)) {
           continue;
       }
       
+      // First thing we are going to do is leave the solenoids for 'kick' time 
+      // to get them moving and overcoming inertia
       if(pwm_kick[i] > 0) {
         pwm_kick[i]--;
         continue;    
       }
       
+      // step through the PWM phase sequence
       pwm_phase[i]--;
       pwm_countdown[i]--;
   
       if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
+        // Restart the phase sequence with the output set high
         solenoids.setOutput(i);
   
         if (pwm_countdown == 0) {
+          // we are done the PWM part of the note.   Leave the output high until note off.
           pwm_phase[i] = 0;              
         }
         else {
+          // Restart the PWM counter
           pwm_phase[i] = PHASE_LIMIT;      
         }
       }
       else if (pwm_phase[i] == (DOWN_PHASE_MAX - pwm_level[i])) {
+        // we are in the low part of the PWM cycle
         solenoids.clearOutput(i);
       }
     }
@@ -190,6 +200,44 @@ void handleProgramChange(byte channel, byte patch) {
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
 }
 
+void handleNoteOn(byte pin, byte velocity) {
+    solenoids.setOutput(pin);
+
+    switch (velocity_program) 
+    {
+        case 1:  // strategy from 1.1.0  quadratic
+          pwm_countdown[pin] = velocity * velocity; // set velocity timer
+          break;
+        case 2: // inverse quadratic
+          if (velocity < 120)
+          {
+             velocity = 120 - velocity;
+             pwm_countdown[pin] = COUNTDOWN_START - ((velocity * velocity) * 7/ 8);
+          }
+          else
+          {
+            pwm_countdown[pin] = NO_COUNTDOWN;
+          }
+          break;
+        case 3: // true pwm
+          pwm_level[pin] = (velocity / VELOCITY_DIVISOR) + 1;
+          if(pwm_level[pin] > LEVEL_MAX) {
+            pwm_countdown[pin] = 0;
+            pwm_phase[pin] = 0;
+            pwm_kick[pin] = 0;
+            pwm_level[pin] = 0;
+          }
+          else {
+            pwm_countdown[pin] = COUNTDOWN_START; 
+            pwm_phase[pin] = PHASE_LIMIT;
+            pwm_kick[pin] = PHASE_KICK;
+          }
+          break;
+        default: // no velocity control == 0
+         break;
+    }
+}
+
 void handleNoteOn(byte channel, byte note, byte velocity) {
   midiLearn.noteOn(channel, note, velocity);
 
@@ -199,49 +247,21 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 
   statusLED.blink(1, 2, 1);
 
-  
   for (int i = 0 ; i < 12 ; i++) {
     if (nvData.midiPins[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
-        solenoids.setOutput(i);
-
-        switch (velocity_program) 
-        {
-            case 1:  // strategy from 1.1.0  quadratic
-              pwm_countdown[i] = velocity * velocity; // set velocity timer
-              break;
-            case 2: // inverse quadratic
-              if (velocity < 120)
-              {
-                 velocity = 120 - velocity;
-                 pwm_countdown[i] = COUNTDOWN_START - ((velocity * velocity) * 7/ 8);
-              }
-              else
-              {
-                pwm_countdown[i] = NO_COUNTDOWN;
-              }
-              break;
-            case 3: // true pwm
-              pwm_level[i] = (velocity / VELOCITY_DIVISOR) + 1;
-              if(pwm_level[i] > LEVEL_MAX) {
-                pwm_countdown[i] = 0;
-                pwm_phase[i] = 0;
-                pwm_kick[i] = 0;
-                pwm_level[i] = 0;
-              }
-              else {
-                pwm_countdown[i] = COUNTDOWN_START; 
-                pwm_phase[i] = PHASE_LIMIT;
-                pwm_kick[i] = PHASE_KICK;
-              }
-              break;
-            default: // no velocity control == 0
-             break;
-        }
+        handleNoteOn(i, velocity);
       }
     }
   }
+}
 
+void handleNoteOff(byte pin) {
+  solenoids.clearOutput(pin);
+  pwm_countdown[pin] = 0;
+  pwm_kick[pin] = 0;
+  pwm_phase[pin] = 0;
+  pwm_level[pin] = 0;
 }
 
 void handleNoteOff(byte channel, byte note, byte velocity) {
@@ -256,30 +276,26 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   for (int i = 0 ; i < 12 ; i++) {
     if (nvData.midiPins[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
-        solenoids.clearOutput(i);
-        pwm_countdown[i] = 0;
-        pwm_kick[i] = 0;
-        pwm_phase[i] = 0;
-        pwm_level[i] = 0;
+        handleNoteOff(i);
       }
     }
   }
 }
 
-void receiveI2CEvent(int l)
+void receiveI2CEvent(int len)
 {
   int r = Wire.read();
   statusLED.blink(1, 2, 1);
 
   switch (r) {
     case I2C_SET:
-      if (l = 3) {
-        char note = Wire.read();
+      if (len = 3) {
+        char pin = Wire.read();
         char velocity = Wire.read();
         if (velocity > 0) {
-          solenoids.setOutput(note);
+          handleNoteOn(pin, velocity);
         } else {
-          solenoids.clearOutput(note);
+          handleNoteOff(pin);
         }
       }
       break;
