@@ -32,14 +32,16 @@ int pwm_countdown[12];                                    // This is the total n
 int pwm_phase[12];                                        // This is a repeating counter of PHASE_LIMIT to 0
 int pwm_kick[12];                                         // An initial loop counter where we leave the output high to overcome inertia in the solenoid
 int pwm_level[12];                                        // A counter that indicates how many loop counts we should leave the output high for.
+const int COUNTDOWN_CONT = 2147483647;                    // number of loops where we apply the PWM for continous mode > 10 days
 const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
 const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
-const int PHASE_KICK = 256;                               // Number of loops where we leave the output high to overcome inertia in the solenoid
+const int PHASE_KICK = 64;                               // Number of loops where we leave the output high to overcome inertia in the solenoid
 
 const int PHASE_LIMIT = 32;                               // The number of loop counts we use to execute a PWM cycle.   If this value is too large, the solendoids will emit an audible noise during PWM
-const int DOWN_PHASE_MAX = 13;                            // The maximum number of loop counts where the output is held low for a PWM cycle
-const int LEVEL_MAX = 12;                                 // Maximum level value for PWM
-const int VELOCITY_DIVISOR = 10;                          // Divide the velocity value (1-127) by this number to the the PWM level
+                                                          // 64 = approximately 1 ms
+const int DOWN_PHASE_MAX = 21;                            // The maximum number of loop counts where the output is held low for a PWM cycle   Values between 13 and 15 are acceptable for a PHASE_LIMIT of 32
+const int LEVEL_MAX = 20;                                 // Maximum level value for PWM so 120 to 127 is equal to no PWM
+const int VELOCITY_DIVISOR = 6;                          // Divide the velocity value (1-127) by this number to the the PWM level
 
 FlashStorage(nvStore, dataCFG);
 FlashStorage(velocityStore, int);
@@ -113,7 +115,7 @@ void loop() {
         pwm_countdown[i]=0;
       }
     }
-  } else if (velocity_program == 3) {
+  } else if ((velocity_program == 3) || (velocity_program == 4)) {
     // repeating pulse width via velocity
     for(int i = 0 ; i < 12 ; i++){
       // If the user has used a very high velocity, we will bypass PWM
@@ -189,7 +191,7 @@ void handleProgramChange(byte channel, byte patch) {
   int prev_value = velocity_program;
   
   velocity_program = patch;
-  if (velocity_program > 3 || velocity_program < 0) {
+  if (velocity_program > 4 || velocity_program < 0) {
       velocity_program = 0;
   }
 
@@ -220,6 +222,7 @@ void handleNoteOn(byte pin, byte velocity) {
           }
           break;
         case 3: // true pwm
+        case 4: // continuous PWM
           pwm_level[pin] = (velocity / VELOCITY_DIVISOR) + 1;
           if(pwm_level[pin] > LEVEL_MAX) {
             pwm_countdown[pin] = 0;
@@ -228,7 +231,7 @@ void handleNoteOn(byte pin, byte velocity) {
             pwm_level[pin] = 0;
           }
           else {
-            pwm_countdown[pin] = COUNTDOWN_START; 
+            pwm_countdown[pin] = velocity_program == 4 ? COUNTDOWN_CONT : COUNTDOWN_START; 
             pwm_phase[pin] = PHASE_LIMIT;
             pwm_kick[pin] = PHASE_KICK;
           }
