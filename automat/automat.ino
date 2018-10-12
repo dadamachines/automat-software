@@ -296,7 +296,7 @@ void receiveI2CEvent(int len)
         char pin = Wire.read();
         char velocity = Wire.read();
         if (velocity > 0) {
-          handleNoteOn(pin, velocity);
+          handleNoteOn(pin, 127);
         } else {
           handleNoteOff(pin);
         }
