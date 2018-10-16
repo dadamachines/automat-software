@@ -13,6 +13,15 @@ const int LEARN_MODE_PIN = 38;                          // pin for the learn mod
 const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic
 const int ACTIVITY_LED = 13;                            // activity led is still on D13 which is connected to PA17 > which means Pin 9 on MKRZero
 
+const int ALWAYS_ON_PROGRAM = 0;                        // The index of the default always on program
+const int QUADRATIC_PROGRAM = 1;                        // The index of the quadratic one pulse program
+const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inverse quadratic one pulse program
+const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program
+const int PWM_MOTOR_PROGRAM = 4;                        // The index of the pwm continous program
+const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
+const int MAX_PROGRAM = 4;                              // The index of the maximum valid program
+
+
 // i2c constants
 // TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
 // so we can mimic its teletype API. Future address will be 0xDA.
@@ -21,30 +30,38 @@ const int I2C_SET = 0;
 
 // NV Data
 typedef struct {
-  byte   midiChannels[12];                                // 1-16 or 0 for any
-  byte   midiPins[12];                                    // midi notes
+  byte   midiChannels[OUTPUT_PINS_COUNT];                                // 1-16 or 0 for any
+  byte   midiPins[OUTPUT_PINS_COUNT];                                    // midi notes
   byte   alignfiller[8];                                  // for eeprom support
 } dataCFG;
 dataCFG nvData;
 
-int velocity_program = 0;
-int pwm_countdown[12];                                    // This is the total number of loops left where we will execute a PWM
-int pwm_phase[12];                                        // This is a repeating counter of PHASE_LIMIT to 0
-int pwm_kick[12];                                         // An initial loop counter where we leave the output high to overcome inertia in the solenoid
-int pwm_level[12];                                        // A counter that indicates how many loop counts we should leave the output high for.
+
+const int MAX_MIDI_CHANNEL = 16;
+
+typedef struct {
+  int velocityProgram[MAX_MIDI_CHANNEL + 1];
+} volocityCFG;
+volocityCFG velocityConfig;
+
+int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
+int pwm_phase[OUTPUT_PINS_COUNT];                         // This is a repeating counter of PHASE_LIMIT to 0
+int pwm_kick[OUTPUT_PINS_COUNT];                          // An initial loop counter where we leave the output high to overcome inertia in the solenoid
+int pwm_level[OUTPUT_PINS_COUNT];                         // A counter that indicates how many loop counts we should leave the output high for.
 const int COUNTDOWN_CONT = 2147483647;                    // number of loops where we apply the PWM for continous mode > 10 days
 const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
 const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
-const int PHASE_KICK = 64;                               // Number of loops where we leave the output high to overcome inertia in the solenoid
+const int PHASE_KICK = 64;                                // Number of loops where we leave the output high to overcome inertia in the solenoid
 
 const int PHASE_LIMIT = 32;                               // The number of loop counts we use to execute a PWM cycle.   If this value is too large, the solendoids will emit an audible noise during PWM
                                                           // 64 = approximately 1 ms
 const int DOWN_PHASE_MAX = 21;                            // The maximum number of loop counts where the output is held low for a PWM cycle   Values between 13 and 15 are acceptable for a PHASE_LIMIT of 32
 const int LEVEL_MAX = 20;                                 // Maximum level value for PWM so 120 to 127 is equal to no PWM
-const int VELOCITY_DIVISOR = 6;                          // Divide the velocity value (1-127) by this number to the the PWM level
+const int VELOCITY_DIVISOR = 6;                           // Divide the velocity value (1-127) by this number to the the PWM level
+
 
 FlashStorage(nvStore, dataCFG);
-FlashStorage(velocityStore, int);
+FlashStorage(velocityStore, volocityCFG);
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -79,11 +96,15 @@ void setup() {
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
-  int veloFromFlash = velocityStore.read();
+  velocityConfig = velocityStore.read();
   // if uninitialized, this value should be read as -1
-  if (veloFromFlash >= 0)
+  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
   {
-    velocity_program = veloFromFlash;
+    if ((velocityConfig.velocityProgram[i] < MIN_PROGRAM) ||
+         (velocityConfig.velocityProgram[i] > MAX_PROGRAM))
+    {
+      velocityConfig.velocityProgram[i] = ALWAYS_ON_PROGRAM;
+    }
   }
   
   statusLED.blink(20, 30, 32);
@@ -101,58 +122,79 @@ void loop() {
     }
   }
 
-  if (velocity_program > 0 && velocity_program < 3) {
-    // new single pulse width via velocity
-    for(int i = 0 ; i < 12 ; i++){
-      if(pwm_countdown[i] > 1 ){
-          if(pwm_countdown[i] < NO_COUNTDOWN){
-            pwm_countdown[i]--;
-          }
-          continue;
-      }
-      if(pwm_countdown[i] > 0) {
-        solenoids.clearOutput(i);
-        pwm_countdown[i]=0;
-      }
+  for(int i = 0 ; i < OUTPUT_PINS_COUNT ; i++){
+    int channel = nvData.midiChannels[i];
+    if (channel < 0 || channel > MAX_MIDI_CHANNEL)
+    {
+      channel = MIDI_CHANNEL_OMNI;
     }
-  } else if ((velocity_program == 3) || (velocity_program == 4)) {
-    // repeating pulse width via velocity
-    for(int i = 0 ; i < 12 ; i++){
-      // If the user has used a very high velocity, we will bypass PWM
-      // Also, we will set a limit of pwm_countdown time to not keep the PWM on 
-      //  once the solenoid has made contact with the drum, etc.
-      if((pwm_countdown[i] == 0) || (pwm_level[i] == 0)) {
-          continue;
-      }
-      
-      // First thing we are going to do is leave the solenoids for 'kick' time 
-      // to get them moving and overcoming inertia
-      if(pwm_kick[i] > 0) {
-        pwm_kick[i]--;
-        continue;    
-      }
-      
-      // step through the PWM phase sequence
-      pwm_phase[i]--;
-      pwm_countdown[i]--;
-  
-      if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
-        // Restart the phase sequence with the output set high
-        solenoids.setOutput(i);
-  
-        if (pwm_countdown == 0) {
-          // we are done the PWM part of the note.   Leave the output high until note off.
-          pwm_phase[i] = 0;              
+    
+    int velocity_program = velocityConfig.velocityProgram[channel];
+
+    switch (velocity_program)
+    {
+      case QUADRATIC_PROGRAM:
+      case INVERSE_QUADRATIC_PROGRAM:
+        {
+        // new single pulse width via velocity
+          if(pwm_countdown[i] > 1 ){
+              if(pwm_countdown[i] < NO_COUNTDOWN){
+                pwm_countdown[i]--;
+              }
+              continue;
+          }
+          if(pwm_countdown[i] > 0) {
+            solenoids.clearOutput(i);
+            pwm_countdown[i]=0;
+          }
         }
-        else {
-          // Restart the PWM counter
-          pwm_phase[i] = PHASE_LIMIT;      
+        break;
+
+      case PWM_PROGRAM:
+      case PWM_MOTOR_PROGRAM:
+        {
+          // repeating pulse width via velocity
+          // If the user has used a very high velocity, we will bypass PWM
+          // Also, we will set a limit of pwm_countdown time to not keep the PWM on 
+          //  once the solenoid has made contact with the drum, etc.
+          if((pwm_countdown[i] == 0) || (pwm_level[i] == 0)) {
+              continue;
+          }
+          
+          // First thing we are going to do is leave the solenoids for 'kick' time 
+          // to get them moving and overcoming inertia
+          if(pwm_kick[i] > 0) {
+            pwm_kick[i]--;
+            continue;    
+          }
+          
+          // step through the PWM phase sequence
+          pwm_phase[i]--;
+          pwm_countdown[i]--;
+      
+          if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
+            // Restart the phase sequence with the output set high
+            solenoids.setOutput(i);
+      
+            if (pwm_countdown == 0) {
+              // we are done the PWM part of the note.   Leave the output high until note off.
+              pwm_phase[i] = 0;              
+            }
+            else {
+              // Restart the PWM counter
+              pwm_phase[i] = PHASE_LIMIT;      
+            }
+          }
+          else if (pwm_phase[i] == (DOWN_PHASE_MAX - pwm_level[i])) {
+            // we are in the low part of the PWM cycle
+            solenoids.clearOutput(i);
+          }
         }
-      }
-      else if (pwm_phase[i] == (DOWN_PHASE_MAX - pwm_level[i])) {
-        // we are in the low part of the PWM cycle
-        solenoids.clearOutput(i);
-      }
+        break;
+
+      case ALWAYS_ON_PROGRAM:
+      default:
+        break;
     }
   }
 
@@ -187,16 +229,16 @@ void loop() {
 /************************************************************************************************************************************************/
 
 void handleProgramChange(byte channel, byte patch) {
-
-  int prev_value = velocity_program;
+  int prev_value = velocityConfig.velocityProgram[channel];
   
-  velocity_program = patch;
-  if (velocity_program > 4 || velocity_program < 0) {
-      velocity_program = 0;
+  if (patch > MAX_PROGRAM || patch < MIN_PROGRAM) {
+      patch = ALWAYS_ON_PROGRAM;
   }
+  velocityConfig.velocityProgram[channel] = patch;
+  velocityConfig.velocityProgram[MIDI_CHANNEL_OMNI] = patch;
 
-  if (velocity_program != prev_value) {
-      velocityStore.write(velocity_program);
+  if (velocityConfig.velocityProgram[channel] != prev_value) {
+      velocityStore.write(velocityConfig);
   }
 
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
@@ -205,12 +247,20 @@ void handleProgramChange(byte channel, byte patch) {
 void handleNoteOn(byte pin, byte velocity) {
     solenoids.setOutput(pin);
 
+    int channel = nvData.midiChannels[pin];
+    if (channel < 0 || channel > MAX_MIDI_CHANNEL)
+    {
+      channel = MIDI_CHANNEL_OMNI;
+    }
+    
+    int velocity_program = velocityConfig.velocityProgram[channel];
+
     switch (velocity_program) 
     {
-        case 1:  // strategy from 1.1.0  quadratic
+        case QUADRATIC_PROGRAM:  // strategy from 1.1.0  quadratic
           pwm_countdown[pin] = velocity * velocity; // set velocity timer
           break;
-        case 2: // inverse quadratic
+        case INVERSE_QUADRATIC_PROGRAM: // inverse quadratic
           if (velocity < 120)
           {
              velocity = 120 - velocity;
@@ -221,8 +271,8 @@ void handleNoteOn(byte pin, byte velocity) {
             pwm_countdown[pin] = NO_COUNTDOWN;
           }
           break;
-        case 3: // true pwm
-        case 4: // continuous PWM
+        case PWM_PROGRAM: // true pwm
+        case PWM_MOTOR_PROGRAM: // continuous PWM
           pwm_level[pin] = (velocity / VELOCITY_DIVISOR) + 1;
           if(pwm_level[pin] > LEVEL_MAX) {
             pwm_countdown[pin] = 0;
@@ -231,12 +281,13 @@ void handleNoteOn(byte pin, byte velocity) {
             pwm_level[pin] = 0;
           }
           else {
-            pwm_countdown[pin] = velocity_program == 4 ? COUNTDOWN_CONT : COUNTDOWN_START; 
+            pwm_countdown[pin] = (velocity_program == PWM_MOTOR_PROGRAM) ? COUNTDOWN_CONT : COUNTDOWN_START; 
             pwm_phase[pin] = PHASE_LIMIT;
             pwm_kick[pin] = PHASE_KICK;
           }
           break;
-        default: // no velocity control == 0
+        case ALWAYS_ON_PROGRAM:
+        default: // no velocity control
          break;
     }
 }
@@ -250,9 +301,9 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 
   statusLED.blink(1, 2, 1);
 
-  for (int i = 0 ; i < 12 ; i++) {
+  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
     if (nvData.midiPins[i] == note) {
-      if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
+      if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
     }
@@ -276,9 +327,9 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   
   statusLED.blink(1, 2, 1);
   
-  for (int i = 0 ; i < 12 ; i++) {
+  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
     if (nvData.midiPins[i] == note) {
-      if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == 0) {
+      if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
     }
