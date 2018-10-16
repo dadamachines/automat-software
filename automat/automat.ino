@@ -32,7 +32,7 @@ const int I2C_SET = 0;
 typedef struct {
   byte   midiChannels[OUTPUT_PINS_COUNT];                                // 1-16 or 0 for any
   byte   midiPins[OUTPUT_PINS_COUNT];                                    // midi notes
-  byte   alignfiller[8];                                  // for eeprom support
+  byte   alignfiller[8];                                  // for eeprom support   (Justin: I don't think this is needed. 32-bit alignment should be enough)
 } dataCFG;
 dataCFG nvData;
 
@@ -41,8 +41,8 @@ const int MAX_MIDI_CHANNEL = 16;
 
 typedef struct {
   int velocityProgram[MAX_MIDI_CHANNEL + 1];
-} volocityCFG;
-volocityCFG velocityConfig;
+} velocityCFG;
+velocityCFG velocityConfig;
 
 int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
 int pwm_phase[OUTPUT_PINS_COUNT];                         // This is a repeating counter of PHASE_LIMIT to 0
@@ -61,7 +61,7 @@ const int VELOCITY_DIVISOR = 6;                           // Divide the velocity
 
 
 FlashStorage(nvStore, dataCFG);
-FlashStorage(velocityStore, volocityCFG);
+FlashStorage(velocityStore, velocityCFG);
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -85,6 +85,8 @@ void setup() {
   pinMode(LEARN_MODE_PIN, INPUT_PULLUP);
   button.attachDoubleClick(doubleclick);                // register button for learnmodes
   button.attachClick(singleclick);                      // register button for learnmodes
+  button.setPressTicks(2000);                           // set a long press to be two seconds
+  button.attachLongPressStart(longButtonPress);         // register button for sysex transmission
   solenoids.begin();                                    // start shiftregister
 
   Wire.begin(AUTOMAT_ADDR);                             // join i2c bus
@@ -93,20 +95,13 @@ void setup() {
   midi2.setHandleProgramChange(handleProgramChange);
   midi2.setHandleNoteOn(handleNoteOn);                  // add Handler for Din MIDI
   midi2.setHandleNoteOff(handleNoteOff);
+  midi2.setHandleSystemExclusive(handleSysEx);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
   velocityConfig = velocityStore.read();
   // if uninitialized, this value should be read as -1
-  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
-  {
-    if ((velocityConfig.velocityProgram[i] < MIN_PROGRAM) ||
-         (velocityConfig.velocityProgram[i] > MAX_PROGRAM))
-    {
-      velocityConfig.velocityProgram[i] = ALWAYS_ON_PROGRAM;
-    }
-  }
-  
+  sanitizeForSysex(&velocityConfig);  
   statusLED.blink(20, 30, 32);
 }
 
@@ -367,3 +362,184 @@ void singleclick(void)  {
   statusLED.blink(10, 0, -1); // LED Settings (On Time, Off Time, Count)
   midiLearn.begin(0);
 }
+
+void longButtonPress(void)  {
+  saveConfigToSysEx();
+}
+
+// 'd' = H64 which is part of the reserved Sysex manufacturer IDs so this shouldn't conflict with any existing IDs
+const int SYSEX_CONFIG_HEADER = 'dAdA';
+const int SYSEX_CONFIG_PINS = 'pins';
+const int SYSEX_CONFIG_VELOCITY = 'velo';
+const int SYSEX_CONFIG_GET_CONFIG = 'getc';
+const int SYSEX_CONFIG_LEN = (sizeof (int) * 3) + sizeof(dataCFG) + sizeof(velocityCFG);
+const int SYSEX_GET_CONFIG_LEN = (sizeof (int) * 2);
+
+void handleSysEx(byte * arr, unsigned size)
+{
+   if(size > 1 && *arr == (byte)0xF0)
+   {
+      size -= 2;
+      arr++;
+      // ignore the sysex framing
+   }
+  
+   if (size < SYSEX_CONFIG_LEN) 
+   {
+      if (size != SYSEX_GET_CONFIG_LEN) 
+      {
+         return;
+      }
+   }
+
+   int* headerP = (int*) arr;
+   if (*headerP != SYSEX_CONFIG_HEADER)
+   {
+       return;
+   }
+   arr += sizeof(int);
+
+   if (size == SYSEX_GET_CONFIG_LEN)
+   {
+       headerP = (int*) arr;
+       if (*headerP == SYSEX_CONFIG_GET_CONFIG)
+       {
+         saveConfigToSysEx();
+       }
+       return;
+   }
+   
+   headerP = (int*) arr;
+   if (*headerP != SYSEX_CONFIG_PINS)
+   {
+       return;
+   }
+   arr += sizeof(int);
+
+   dataCFG* dataP = (dataCFG*) arr;
+
+   if (hasConfigChanged(&nvData, dataP)) 
+   {
+      // avoid writing to Flash unless there is a need
+      nvData = *dataP;
+      nvStore.write(nvData);
+   }
+   statusLED.blink(8, 14, 16);
+   arr += sizeof(dataCFG);
+     
+   headerP = (int*) arr;
+   if (*headerP != SYSEX_CONFIG_VELOCITY)
+   {
+       return;
+   }
+   arr += sizeof(int);
+
+   velocityCFG* veloP = (velocityCFG*) arr;
+   if (hasConfigChanged(&velocityConfig, veloP)) 
+   {
+      // avoid writing to Flash unless there is a need
+      velocityConfig = *veloP;
+      velocityStore.write(velocityConfig);
+   }
+   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
+   // I know this line is not really needed, but I don't want it forgotten when we extend this method
+   arr += sizeof(velocityCFG);
+}
+
+void saveConfigToSysEx()
+{
+   byte outArr[SYSEX_CONFIG_LEN];
+   byte* outP = &outArr[0];
+
+   int* headerP = (int*) outP;
+   *headerP = SYSEX_CONFIG_HEADER;
+   outP += sizeof(int);
+
+   headerP = (int*) outP;
+   *headerP = SYSEX_CONFIG_PINS;
+   outP += sizeof(int);
+
+   dataCFG* dataP = (dataCFG*) outP;
+   *dataP = nvData;
+   sanitizeForSysex(dataP);
+   outP += sizeof(dataCFG);
+     
+   headerP = (int*) outP;
+   *headerP = SYSEX_CONFIG_VELOCITY;
+   outP += sizeof(int);
+
+   velocityCFG* veloP = (velocityCFG*) outP;
+   *veloP = velocityConfig;
+   sanitizeForSysex(veloP);
+   // I know this line is not really needed, but I don't want it forgotten when we extend this method
+   outP += sizeof(velocityCFG);
+
+   midi2.sendSysEx(SYSEX_CONFIG_LEN, outArr);
+   statusLED.blink(2, 1, 3); // LED Settings (On Time, Off Time, Count)
+}
+
+void sanitizeForSysex(dataCFG* dataP)
+{
+   // we need to avoid any values > 127 for sysex
+   for (int i = 0; i < 8; ++i)
+   {  
+     dataP->alignfiller[i] = 0;
+   }
+   
+   for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+   {
+     if(dataP->midiChannels[i] < 0 || dataP->midiChannels[i] > 127)
+     {
+       dataP->midiChannels[i] = MIDI_CHANNEL_OMNI;
+     }
+     
+     if(dataP->midiPins[i] < 0 || dataP->midiPins[i] > 127)
+     {
+       dataP->midiPins[i] = 0;
+     }
+   }
+}
+
+bool hasConfigChanged(dataCFG* config1, dataCFG* config2)
+{
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    if(config1->midiChannels[i] != config2->midiChannels[i])
+    {
+      return true;
+    }
+    if(config1->midiPins[i] != config2->midiPins[i])
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
+void sanitizeForSysex(velocityCFG* veloP)
+{
+  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
+  {
+    if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
+    {
+      veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
+    }
+  }
+}
+
+bool hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
+{
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    if(config1->velocityProgram[i] != config2->velocityProgram[i])
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
