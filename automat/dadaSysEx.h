@@ -66,9 +66,9 @@ class dadaSysEx {
       UsbSysExCursor = 0;
     };
 
-    inline void handleSysEx(byte * arr, unsigned len);
+    inline bool handleSysEx(byte * arr, unsigned len);
 
-    inline void handleSysExUSBPacket(midiEventPacket_t rx);
+    inline bool handleSysExUSBPacket(midiEventPacket_t rx);
  
     inline void saveConfigToSysEx();
     

@@ -38,7 +38,7 @@
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
-void dadaSysEx::handleSysEx(byte * arr, unsigned len)
+bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 {
    if(len > 1 && (*arr == SYSEX_START))
    {
@@ -50,13 +50,13 @@ void dadaSysEx::handleSysEx(byte * arr, unsigned len)
    {
       if (len != SYSEX_GET_CONFIG_LEN)
       {
-         return;
+         return false;
       }
    }
 
    if (getIntFromArray(arr) != SYSEX_CONFIG_HEADER)
    {
-       return;
+       return false;
    }
    arr += sizeof(int);
 
@@ -65,13 +65,14 @@ void dadaSysEx::handleSysEx(byte * arr, unsigned len)
        if (getIntFromArray(arr) == SYSEX_CONFIG_GET_CONFIG)
        {
          saveConfigToSysEx();
+         return true;
        }
-       return;
+       return false;
    }
    
    if (getIntFromArray(arr) != SYSEX_CONFIG_PINS)
    {
-       return;
+       return false;
    }
    arr += sizeof(int);
 
@@ -87,7 +88,7 @@ void dadaSysEx::handleSysEx(byte * arr, unsigned len)
     
    if (getIntFromArray(arr) != SYSEX_CONFIG_VELOCITY)
    {
-       return;
+       return false;
    }
    arr += sizeof(int);
 
@@ -101,11 +102,12 @@ void dadaSysEx::handleSysEx(byte * arr, unsigned len)
    // I know this line is not really needed, but I don't want it forgotten when we extend this method
    arr += sizeof(velocityCFG);
 
-   statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+   return true;
 }
 
-void dadaSysEx::handleSysExUSBPacket(midiEventPacket_t rx)
+bool dadaSysEx::handleSysExUSBPacket(midiEventPacket_t rx)
 {
+    bool ret = false;
     byte b;
 
     for(int i = 1; i < 4; ++i) {
@@ -124,7 +126,7 @@ void dadaSysEx::handleSysExUSBPacket(midiEventPacket_t rx)
       if (b == SYSEX_END) {
         UsbSysExBuffer[UsbSysExCursor++] = b;
         
-        handleSysEx(UsbSysExBuffer, UsbSysExCursor);
+        ret = handleSysEx(UsbSysExBuffer, UsbSysExCursor);
         UsbSysExCursor = 0;
         break;
       } else if (((b & 0x80) == 0) || (b == SYSEX_START)) {
@@ -140,6 +142,8 @@ void dadaSysEx::handleSysExUSBPacket(midiEventPacket_t rx)
          }
       }
     }
+
+    return ret;
 }
 
 void dadaSysEx::saveConfigToSysEx()
@@ -171,8 +175,6 @@ void dadaSysEx::saveConfigToSysEx()
        midi2->sendSysEx(SYSEX_CONFIG_LEN, sysexOutArr, true);
    }
    MidiUSB_sendSysEx(sysexOutArr, SYSEX_CONFIG_LEN);
-   
-   statusLED.blink(8, 4, 4); // LED Settings (On Time, Off Time, Count)
 }
 
 void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)

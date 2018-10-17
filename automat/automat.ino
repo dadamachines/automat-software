@@ -206,7 +206,9 @@ void loop() {
       if (rx.header != 0)
       {
         if (sysex.inSysExReceive()) {
-           sysex.handleSysExUSBPacket(rx);
+           if (sysex.handleSysExUSBPacket(rx)) {
+              statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+           }
         } else {
           switch (rx.byte1 & 0xF0) {
             case 0x90:  // note on
@@ -222,7 +224,9 @@ void loop() {
               handleProgramChange(1 + (rx.byte1 & 0xF), rx.byte2);
               break;
             case SYSEX_START: // SystemExclusive
-              sysex.handleSysExUSBPacket(rx);
+              if (sysex.handleSysExUSBPacket(rx)) {
+                 statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+              }
               break;
           }
        }
@@ -379,10 +383,13 @@ void singleclick(void)  {
 
 void longButtonPress(void)  {
   sysex.saveConfigToSysEx();
+  statusLED.blink(8, 4, 4); // LED Settings (On Time, Off Time, Count)
 }
 
 void handleSysEx(byte * arr, unsigned len) {
-  sysex.handleSysEx(arr, len);
+  if(sysex.handleSysEx(arr, len)) {
+       statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+  }
 }
 
 
