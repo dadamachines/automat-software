@@ -73,11 +73,15 @@ dadaStatusLED statusLED(ACTIVITY_LED);                    // led controller
 
 #include "dadaMidiLearn.h"                              // learn class
 
+#include "dadaSysEx.h"
+#include "dadaSysEx.hpp"
+
 // Objects
 OneButton button(LEARN_MODE_PIN, true);                 // 38 Pin in new layout is Pin 38 used for SD Card on MKRZero
 
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi2);   // DIN Midi Stuff
 dadaMidiLearn midiLearn(&nvData);                       // lern class + load/save from eeprom
+dadaSysEx sysex(&nvData, &velocityConfig, &midi2);
 
 void setup() {
   Serial1.begin(31250);                                 // set up MIDI baudrate
@@ -103,13 +107,9 @@ void setup() {
 
   velocityConfig = velocityStore.read();
   // if uninitialized, this value should be read as -1
-  sanitizeForSysex(&velocityConfig);  
+  sysex.sanitizeVelocityConfig(&velocityConfig);  
   statusLED.blink(20, 30, 32);
 }
-
-static int UsbSysExCursor = 0;
-const int MAX_SYSEX_MESSAGE_SIZE = 128;
-static byte UsbSysExBuffer[MAX_SYSEX_MESSAGE_SIZE];
 
 void loop() {
   midi2.read();
@@ -205,8 +205,8 @@ void loop() {
     rx = MidiUSB.read();
       if (rx.header != 0)
       {
-        if (UsbSysExCursor > 0) {
-           handleSysExUSBPacket(rx);
+        if (sysex.inSysExReceive()) {
+           sysex.handleSysExUSBPacket(rx);
         } else {
           switch (rx.byte1 & 0xF0) {
             case 0x90:  // note on
@@ -222,8 +222,7 @@ void loop() {
               handleProgramChange(1 + (rx.byte1 & 0xF), rx.byte2);
               break;
             case SYSEX_START: // SystemExclusive
-              UsbSysExCursor = 0;
-              handleSysExUSBPacket(rx);
+              sysex.handleSysExUSBPacket(rx);
               break;
           }
        }
@@ -379,306 +378,11 @@ void singleclick(void)  {
 }
 
 void longButtonPress(void)  {
-  saveConfigToSysEx();
+  sysex.saveConfigToSysEx();
 }
 
-// 'd' = H64 which is part of the reserved Sysex manufacturer IDs so this shouldn't conflict with any existing IDs
-const int SYSEX_CONFIG_HEADER = 'dAdA';
-const int SYSEX_CONFIG_PINS = 'pins';
-const int SYSEX_CONFIG_VELOCITY = 'velo';
-const int SYSEX_CONFIG_GET_CONFIG = 'getc';
-const int SYSEX_CONFIG_LEN = 2 + (sizeof (int) * 3) + sizeof(dataCFG) + sizeof(velocityCFG);
-const int SYSEX_GET_CONFIG_LEN = 2 + (sizeof (int) * 2);
-
-void handleSysEx(byte * arr, unsigned len)
-{
-   if(len > 1 && (*arr == SYSEX_START))
-   {
-      arr++;
-      // ignore the sysex framing
-   }
-  
-   if (len < SYSEX_CONFIG_LEN) 
-   {
-      if (len != SYSEX_GET_CONFIG_LEN) 
-      {
-         return;
-      }
-   }
-
-   if (getIntFromArray(arr) != SYSEX_CONFIG_HEADER)
-   {
-       return;
-   }
-   arr += sizeof(int);
-
-   if (len == SYSEX_GET_CONFIG_LEN)
-   {
-       if (getIntFromArray(arr) == SYSEX_CONFIG_GET_CONFIG)
-       {
-         saveConfigToSysEx();
-       }
-       return;
-   }
-   
-   if (getIntFromArray(arr) != SYSEX_CONFIG_PINS)
-   {
-       return;
-   }
-   arr += sizeof(int);
-
-   dataCFG* dataP = (dataCFG*) arr;
-
-   if (hasConfigChanged(&nvData, dataP)) 
-   {
-      // avoid writing to Flash unless there is a need
-      copyConfig(dataP, &nvData);
-      nvStore.write(nvData);
-   }
-   arr += sizeof(dataCFG);
-     
-   if (getIntFromArray(arr) != SYSEX_CONFIG_VELOCITY)
-   {
-       return;
-   }
-   arr += sizeof(int);
-
-   velocityCFG* veloP = (velocityCFG*) arr;
-   if (hasConfigChanged(&velocityConfig, veloP)) 
-   {
-      // avoid writing to Flash unless there is a need
-      copyConfig(veloP, &velocityConfig);
-      velocityStore.write(velocityConfig);
-   }
-   // I know this line is not really needed, but I don't want it forgotten when we extend this method
-   arr += sizeof(velocityCFG);
-
-   statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+void handleSysEx(byte * arr, unsigned len) {
+  sysex.handleSysEx(arr, len);
 }
-
-static byte sysexOutArr[SYSEX_CONFIG_LEN];
-
-void saveConfigToSysEx()
-{   
-   byte* outP = &sysexOutArr[0];
-
-   *outP++ = SYSEX_START;
-
-   outP = putIntToArray(outP, SYSEX_CONFIG_HEADER);
-
-   outP = putIntToArray(outP, SYSEX_CONFIG_PINS);
-
-   dataCFG* dataP = (dataCFG*) outP;
-   copyConfig(&nvData, dataP);
-   sanitizeForSysex(dataP);
-   outP += sizeof(dataCFG);
-     
-   outP = putIntToArray(outP, SYSEX_CONFIG_VELOCITY);
-
-   velocityCFG* veloP = (velocityCFG*) outP;
-   copyConfig(&velocityConfig, veloP);
-   sanitizeForSysex(veloP);
-   outP += sizeof(velocityCFG);
-
-   *outP = SYSEX_END;
-
-   // the midi2.send function probably doesn't do anything with the current hardware, but I'm leaving it in for completeness 
-   midi2.sendSysEx(SYSEX_CONFIG_LEN, sysexOutArr, true);
-   MidiUSB_sendSysEx(sysexOutArr, SYSEX_CONFIG_LEN);
-   
-   statusLED.blink(8, 4, 4); // LED Settings (On Time, Off Time, Count)
-}
-
-void sanitizeForSysex(dataCFG* dataP)
-{
-   // we need to avoid any values > 127 for sysex
-   for (int j = 0; j < 8; ++j)
-   {  
-     dataP->alignfiller[j] = 0;
-   }
-   
-   for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
-   {
-     if(dataP->midiChannels[i] < 0 || dataP->midiChannels[i] > 127)
-     {
-       dataP->midiChannels[i] = MIDI_CHANNEL_OMNI;
-     }
-     
-     if(dataP->midiPins[i] < 0 || dataP->midiPins[i] > 127)
-     {
-       dataP->midiPins[i] = 0;
-     }
-   }
-}
-
-bool hasConfigChanged(dataCFG* config1, dataCFG* config2)
-{
-  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
-  {
-    if(config1->midiChannels[i] != config2->midiChannels[i])
-    {
-      return true;
-    }
-    if(config1->midiPins[i] != config2->midiPins[i])
-    {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-void copyConfig(dataCFG* src, dataCFG* dest)
-{
-  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
-  {
-    dest->midiChannels[i] = src->midiChannels[i];
-    dest->midiPins[i] = src->midiPins[i];
-  }
-
-  for (int j = 0; j < 8; ++j)
-  {  
-    dest->alignfiller[j] = 0;
-  }
-}
-
-void sanitizeForSysex(velocityCFG* veloP)
-{
-  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
-  {
-    if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
-    {
-      veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
-    }
-  }
-
-  for (int j = 0; j < 3; ++j)
-  {  
-    veloP->alignfiller[j] = 0;
-  }
-}
-
-bool hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
-{
-  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
-  {
-    if(config1->velocityProgram[i] != config2->velocityProgram[i])
-    {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-void copyConfig(velocityCFG* src, velocityCFG* dest)
-{
-  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
-  {
-    dest->velocityProgram[i] = src->velocityProgram[i];
-  }
-
-  for (int j = 0; j < 3; ++j)
-  {  
-    dest->alignfiller[j] = 0;
-  }
-}
-
-void handleSysExUSBPacket(midiEventPacket_t rx)
-{
-  byte b;
-  
-  for(int i = 1; i < 4; ++i) {
-    switch(i) {
-      case 1:
-        b = rx.byte1;
-      break;
-      case 2:
-        b = rx.byte2;
-      break;
-      case 3:
-        b = rx.byte3;
-      break;
-    }
-
-    if (b == SYSEX_END) {
-      UsbSysExBuffer[UsbSysExCursor++] = b;
-      
-      handleSysEx(UsbSysExBuffer, UsbSysExCursor);
-      UsbSysExCursor = 0;
-      break;
-    } else if (((b & 0x80) == 0) || (b == SYSEX_START)) {
-       UsbSysExBuffer[UsbSysExCursor++] = b; 
-
-       if (UsbSysExCursor >= MAX_SYSEX_MESSAGE_SIZE) {
-         // Something went wrong with message, abort
-         UsbSysExCursor = 0;
-         break;
-       }
-    }
-  }
-}
-
-void MidiUSB_sendSysEx(byte *data, size_t len)
-{
-    byte midiData[4];
-    const byte *pData = data;
-    int bytesRemaining = len;
-
-    while (bytesRemaining > 0) {
-        switch (bytesRemaining) {
-        case 1:
-            midiData[0] = 5;
-            midiData[1] = *pData;
-            midiData[2] = 0;
-            midiData[3] = 0;
-            bytesRemaining = 0;
-            break;
-        case 2:
-            midiData[0] = 6;
-            midiData[1] = *pData++;
-            midiData[2] = *pData;
-            midiData[3] = 0;
-            bytesRemaining = 0;
-            break;
-        case 3:
-            midiData[0] = 7;
-            midiData[1] = *pData++;
-            midiData[2] = *pData++;
-            midiData[3] = *pData;
-            bytesRemaining = 0;
-            break;
-        default:
-            midiData[0] = 4;
-            midiData[1] = *pData++;
-            midiData[2] = *pData++;
-            midiData[3] = *pData++;
-            bytesRemaining -= 3;
-            break;
-        }
-        MidiUSB.write(midiData, 4);
-        delay(1);
-    }
-}
-
-int getIntFromArray(byte* arr)
-{
-    int ret = (arr[0] & 0x0FF) << 24;
-    ret |= (arr[1] & 0x0FF)  << 16;  
-    ret |= (arr[2] & 0x0FF)  << 8;  
-    ret |= (arr[3] & 0x0FF) ;  
-    return ret;
-}
-
-byte* putIntToArray(byte* arr, int in)
-{
-    arr[0] = in >> 24;
-    arr[1] = (in >> 16) & 0x0FF;
-    arr[2] = (in >> 8) & 0x0FF;
-    arr[3] = in & 0x0FF;
-
-    return arr + sizeof(int);
-}
-
 
 
