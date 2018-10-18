@@ -64,6 +64,8 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    {
        if (getIntFromArray(arr) == SYSEX_CONFIG_GET_CONFIG)
        {
+         // provide a small delay in case they need to get ready to receive this data
+         delay(200);
          saveConfigToSysEx();
          return true;
        }
@@ -179,17 +181,12 @@ void dadaSysEx::saveConfigToSysEx()
 
 void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
 {
-  for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
   {
     if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
     {
       veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
     }
-  }
-
-  for (int j = 0; j < 3; ++j)
-  {
-    veloP->alignfiller[j] = 0;
   }
 }
 
@@ -248,7 +245,7 @@ inline void dadaSysEx::copyConfig(dataCFG* src, dataCFG* dest)
     
 bool dadaSysEx::hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
 {
-    for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
+    for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       if(config1->velocityProgram[i] != config2->velocityProgram[i])
       {
@@ -261,14 +258,9 @@ bool dadaSysEx::hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
   
 inline void dadaSysEx::copyConfig(velocityCFG* src, velocityCFG* dest)
 {
-    for (int i = 0; i <= MAX_MIDI_CHANNEL; ++i)
+    for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       dest->velocityProgram[i] = src->velocityProgram[i];
-    }
-
-    for (int j = 0; j < 3; ++j)
-    {
-      dest->alignfiller[j] = 0;
     }
 }
   

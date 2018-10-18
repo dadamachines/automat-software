@@ -39,11 +39,8 @@ typedef struct {
 dataCFG nvData;
 
 
-const int MAX_MIDI_CHANNEL = 16;
-
 typedef struct {
-  byte velocityProgram[MAX_MIDI_CHANNEL + 1];
-  byte alignfiller[3];                                     // for eeprom support
+  byte velocityProgram[OUTPUT_PINS_COUNT];
 } velocityCFG;
 velocityCFG velocityConfig;
 
@@ -124,13 +121,7 @@ void loop() {
   }
 
   for(int i = 0 ; i < OUTPUT_PINS_COUNT ; i++){
-    int channel = nvData.midiChannels[i];
-    if (channel < 0 || channel > MAX_MIDI_CHANNEL)
-    {
-      channel = MIDI_CHANNEL_OMNI;
-    }
-    
-    int velocity_program = velocityConfig.velocityProgram[channel];
+    int velocity_program = velocityConfig.velocityProgram[i];
 
     switch (velocity_program)
     {
@@ -242,16 +233,24 @@ void loop() {
 /************************************************************************************************************************************************/
 
 void handleProgramChange(byte channel, byte patch) {
-  int prev_value = velocityConfig.velocityProgram[channel];
-  
+
   if (patch > MAX_PROGRAM || patch < MIN_PROGRAM) {
       patch = ALWAYS_ON_PROGRAM;
   }
-  velocityConfig.velocityProgram[channel] = patch;
-  velocityConfig.velocityProgram[MIDI_CHANNEL_OMNI] = patch;
 
-  if (velocityConfig.velocityProgram[channel] != prev_value) {
-      velocityStore.write(velocityConfig);
+  bool configChanged = false;
+
+  for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
+    if ((nvData.midiChannels[pin] == channel) || (nvData.midiChannels[pin] == MIDI_CHANNEL_OMNI)) {     
+      if (velocityConfig.velocityProgram[pin] != patch) {
+        velocityConfig.velocityProgram[pin] = patch;
+        configChanged = true;
+      }
+    }
+  }
+
+  if (configChanged) {
+     velocityStore.write(velocityConfig);
   }
 
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
@@ -260,13 +259,7 @@ void handleProgramChange(byte channel, byte patch) {
 void handleNoteOn(byte pin, byte velocity) {
     solenoids.setOutput(pin);
 
-    int channel = nvData.midiChannels[pin];
-    if (channel < 0 || channel > MAX_MIDI_CHANNEL)
-    {
-      channel = MIDI_CHANNEL_OMNI;
-    }
-    
-    int velocity_program = velocityConfig.velocityProgram[channel];
+    int velocity_program = velocityConfig.velocityProgram[pin];
 
     switch (velocity_program) 
     {
