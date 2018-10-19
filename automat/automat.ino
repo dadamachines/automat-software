@@ -66,6 +66,7 @@ const int VELOCITY_DIVISOR = 6;                           // Divide the velocity
 
 const int MAX_MIDI_CHANNEL = 16;
 
+int pitchBend[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int humNote[OUTPUT_PINS_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -109,6 +110,7 @@ void setup() {
   midi2.setHandleNoteOff(handleNoteOff);
   midi2.setHandleSystemExclusive(handleSysEx);
   midi2.setHandleControlChange(handleControlChange);
+  midi2.setHandlePitchBend(handlePitchBend);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
@@ -253,6 +255,15 @@ void loop() {
             case 0xC0: // program change
               handleProgramChange(1 + (rx.byte1 & 0xF), rx.byte2);
               break;
+            case 0xE0: // pitch wheel
+            {
+              int p14bit;
+              p14bit = (unsigned short)rx.byte3 & 0x7F;
+              p14bit <<= 7;
+              p14bit |= (unsigned short)rx.byte2 & 0x7F;
+              handlePitchBend(1 + (rx.byte1 & 0xF), p14bit - 8192);
+              break;
+            }
             case SYSEX_START: // SystemExclusive
               if (sysex.handleSysExUSBPacket(rx)) {
                  statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
@@ -406,6 +417,11 @@ void handleModWheel(byte channel, byte mod) {
   modWheel[MIDI_CHANNEL_OMNI] = mod;
 }
 
+void handlePitchBend(byte channel, int bend) {
+  pitchBend[channel] = bend;
+  pitchBend[MIDI_CHANNEL_OMNI] = bend;
+}
+
 void receiveI2CEvent(int len)
 {
   int r = Wire.read();
@@ -450,7 +466,23 @@ void handleSysEx(byte * arr, unsigned len) {
 }
 
 int calculateTotalHumPhase(int pin) {
-  return NOTE_PERIOD[humNote[pin]];
+  int note = humNote[pin];
+  int ret = NOTE_PERIOD[note];
+
+  if (ret != 0) {
+    int channel = nvData.midiChannels[pin];
+
+    if (pitchBend[channel] != 0) {
+       float adjust =  pitchBend[channel] / 65536.f;
+
+       ret -= (ret * adjust);
+       if (ret < MAX_NOTE_PHASE[note] + MIN_NOTE_PHASE) {
+         ret = MAX_NOTE_PHASE[note] + MIN_NOTE_PHASE;
+       }
+    }
+  }
+
+  return ret;
 }
 
 int calculateLoHumPhase(int pin) {
