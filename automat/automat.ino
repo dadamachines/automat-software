@@ -18,8 +18,9 @@ const int QUADRATIC_PROGRAM = 1;                        // The index of the quad
 const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inverse quadratic one pulse program
 const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program
 const int PWM_MOTOR_PROGRAM = 4;                        // The index of the pwm continous program
+const int HUM_MOTOR_PROGRAM = 5;                        // The index of the making the motor hum to a note
 const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
-const int MAX_PROGRAM = 4;                              // The index of the maximum valid program
+const int MAX_PROGRAM = 5;                              // The index of the maximum valid program
 
 const byte SYSEX_START = 0xF0;
 const byte SYSEX_END = 0xF7;
@@ -38,11 +39,15 @@ typedef struct {
 } dataCFG;
 dataCFG nvData;
 
-
 typedef struct {
   byte velocityProgram[OUTPUT_PINS_COUNT];
 } velocityCFG;
 velocityCFG velocityConfig;
+
+
+FlashStorage(nvStore, dataCFG);
+FlashStorage(velocityStore, velocityCFG);
+
 
 int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
 int pwm_phase[OUTPUT_PINS_COUNT];                         // This is a repeating counter of PHASE_LIMIT to 0
@@ -59,8 +64,12 @@ const int DOWN_PHASE_MAX = 21;                            // The maximum number 
 const int LEVEL_MAX = 20;                                 // Maximum level value for PWM so 120 to 127 is equal to no PWM
 const int VELOCITY_DIVISOR = 6;                           // Divide the velocity value (1-127) by this number to the the PWM level
 
-FlashStorage(nvStore, dataCFG);
-FlashStorage(velocityStore, velocityCFG);
+const int MAX_MIDI_CHANNEL = 16;
+
+int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+int humNote[OUTPUT_PINS_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+#include "humTiming.h"
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -99,12 +108,14 @@ void setup() {
   midi2.setHandleNoteOn(handleNoteOn);                  // add Handler for Din MIDI
   midi2.setHandleNoteOff(handleNoteOff);
   midi2.setHandleSystemExclusive(handleSysEx);
+  midi2.setHandleControlChange(handleControlChange);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
   velocityConfig = velocityStore.read();
   // if uninitialized, this value should be read as -1
   sysex.sanitizeVelocityConfig(&velocityConfig);  
+
   statusLED.blink(20, 30, 32);
 }
 
@@ -184,6 +195,31 @@ void loop() {
         }
         break;
 
+      case HUM_MOTOR_PROGRAM:
+        {
+          // repeating pulse width tuned to a pitch with modulation
+          if(pwm_level[i] == 0) {
+              continue;
+          }
+
+          // step through the PWM phase sequence
+          pwm_phase[i]--;
+
+          if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
+            // Restart the PWM counter
+            pwm_phase[i] = calculateTotalHumPhase(i);
+            pwm_level[i] = calculateLoHumPhase(i);
+            if (pwm_level[i] > 0) {
+              // Restart the phase sequence with the output set high
+              solenoids.setOutput(i);
+            }
+          }
+          else if (pwm_phase[i] == pwm_level[i]) {
+            // we are in the low part of the PWM cycle
+            solenoids.clearOutput(i);
+          }
+        }
+        break;
       case ALWAYS_ON_PROGRAM:
       default:
         break;
@@ -210,6 +246,9 @@ void loop() {
               break;
             case 0x80: // note off
               handleNoteOff(1 + (rx.byte1 & 0xF), rx.byte2, rx.byte3);
+              break;
+            case 0xB0: // control change
+              handleControlChange(1 + (rx.byte1 & 0xF), rx.byte2, rx.byte3);
               break;
             case 0xC0: // program change
               handleProgramChange(1 + (rx.byte1 & 0xF), rx.byte2);
@@ -292,6 +331,12 @@ void handleNoteOn(byte pin, byte velocity) {
             pwm_kick[pin] = PHASE_KICK;
           }
           break;
+        case HUM_MOTOR_PROGRAM:
+          if (pwm_level[pin] == 0) {
+            pwm_phase[pin] = calculateTotalHumPhase(pin);
+            pwm_level[pin] = calculateLoHumPhase(pin);
+          }  // otherwise let it calculate the phase at the end of the cycle
+          break;
         case ALWAYS_ON_PROGRAM:
         default: // no velocity control
          break;
@@ -312,6 +357,9 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
+    } else if (velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM && nvData.midiChannels[i] == channel) {
+        humNote[i] = note;
+        handleNoteOn(i, velocity);
     }
   }
 }
@@ -338,8 +386,24 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
+    } else if ((velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM)
+                && (nvData.midiChannels[i] == channel)
+                && (humNote[i] == note)) {
+        handleNoteOff(i);
+        humNote[i] = 0;
     }
   }
+}
+
+void handleControlChange(byte channel, byte number, byte value) {
+  if (number == 1) {
+    handleModWheel(channel, value);
+  }
+}
+
+void handleModWheel(byte channel, byte mod) {
+  modWheel[channel] = mod;
+  modWheel[MIDI_CHANNEL_OMNI] = mod;
 }
 
 void receiveI2CEvent(int len)
@@ -383,6 +447,29 @@ void handleSysEx(byte * arr, unsigned len) {
   if(sysex.handleSysEx(arr, len)) {
        statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
   }
+}
+
+int calculateTotalHumPhase(int pin) {
+  return NOTE_PERIOD[humNote[pin]];
+}
+
+int calculateLoHumPhase(int pin) {
+  int channel = nvData.midiChannels[pin];
+  int note = humNote[pin];
+
+  if (NOTE_PERIOD[note] == 0) {
+    // the math should still result in 0, but just in case...
+    return 0;
+  }
+
+  float hiPhase = NOTE_PHASE_SCALE[note] * modWheel[channel];
+  int iHiPhase = MIN_NOTE_PHASE + (int) (hiPhase + 0.5f);
+
+  if (iHiPhase > MAX_NOTE_PHASE[note]) {
+    iHiPhase = MAX_NOTE_PHASE[note];
+  }
+
+  return NOTE_PERIOD[note] - iHiPhase;
 }
 
 
