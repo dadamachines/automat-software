@@ -54,6 +54,10 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
       }
    }
 
+   if (*arr++ != 0) {
+     return false;
+   }
+
    if (getIntFromArray(arr) != SYSEX_CONFIG_HEADER)
    {
        return false;
@@ -153,6 +157,8 @@ void dadaSysEx::saveConfigToSysEx()
    byte* outP = &sysexOutArr[0];
 
    *outP++ = SYSEX_START;
+
+   *outP++ = 0;
 
    outP = putIntToArray(outP, SYSEX_CONFIG_HEADER);
 
