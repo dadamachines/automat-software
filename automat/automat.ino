@@ -97,7 +97,7 @@ void setup() {
   pinMode(LEARN_MODE_PIN, INPUT_PULLUP);
   button.attachDoubleClick(doubleclick);                // register button for learnmodes
   button.attachClick(singleclick);                      // register button for learnmodes
-  button.setPressTicks(2000);                           // set a long press to be two seconds
+  button.setPressTicks(3000);                           // set a long press to be three seconds
   button.attachLongPressStart(longButtonPress);         // register button for sysex transmission
   solenoids.begin();                                    // start shiftregister
 
