@@ -42,11 +42,14 @@ class dadaSysEx {
   private:
     // 'dA' = H64H41 which is way above the currently allocated Sysex manufacturer IDs so this shouldn't conflict with any existing IDs
     static const int SYSEX_CONFIG_HEADER = 'dAdA';
+    static const int SYSEX_VERSION_HEADER = 'dAdV';
     static const int SYSEX_CONFIG_PINS = 'pins';
     static const int SYSEX_CONFIG_VELOCITY = 'velo';
     static const int SYSEX_CONFIG_GET_CONFIG = 'getc';
+    static const int SYSEX_CONFIG_GET_VERSION = 'getv';
     static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 3) + sizeof(dataCFG) + sizeof(velocityCFG);
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
+    static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 2);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
   
     static byte sysexOutArr[SYSEX_CONFIG_LEN];
@@ -81,7 +84,8 @@ class dadaSysEx {
     }
 
 protected:
-  
+  inline void sendVersionToSysEx();
+
   inline static void sanitizeForSysex(dataCFG* dataP);
   inline static void sanitizeForSysex(velocityCFG* veloP);
   

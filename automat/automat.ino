@@ -8,6 +8,8 @@
 #include <Wire.h>
 
 // constants
+const int SYSEX_FIRMWARE_VERSION = 0x01000300;              // = version 1.3.0
+
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
 const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic

@@ -73,6 +73,13 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
          saveConfigToSysEx();
          return true;
        }
+       if (getIntFromArray(arr) == SYSEX_CONFIG_GET_VERSION)
+       {
+         // provide a small delay in case they need to get ready to receive this data
+         delay(200);
+         sendVersionToSysEx();
+         return true;
+       }
        return false;
    }
    
@@ -194,6 +201,27 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
       veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
     }
   }
+}
+
+void dadaSysEx::sendVersionToSysEx()
+{
+   byte* outP = &sysexOutArr[0];
+
+   *outP++ = SYSEX_START;
+
+   *outP++ = 0;
+
+   outP = putIntToArray(outP, SYSEX_VERSION_HEADER);
+
+   outP = putIntToArray(outP, SYSEX_FIRMWARE_VERSION);
+
+   *outP = SYSEX_END;
+
+   // the midi2.send function probably doesn't do anything with the current hardware, but I'm leaving it in for completeness
+   if (midi2 != NULL) {
+       midi2->sendSysEx(SYSEX_VERSION_LEN, sysexOutArr, true);
+   }
+   MidiUSB_sendSysEx(sysexOutArr, SYSEX_VERSION_LEN);
 }
 
 void dadaSysEx::sanitizeForSysex(dataCFG* dataP)
