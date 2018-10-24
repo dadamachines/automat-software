@@ -45,26 +45,33 @@ class dadaSysEx {
     static const int SYSEX_VERSION_HEADER = 'dAdV';
     static const int SYSEX_CONFIG_PINS = 'pins';
     static const int SYSEX_CONFIG_VELOCITY = 'velo';
+    static const int SYSEX_CONFIG_PINS_ALT = 'pin2';
+    static const int SYSEX_CONFIG_VELOCITY_ALT = 'vel2';
     static const int SYSEX_CONFIG_GET_CONFIG = 'getc';
     static const int SYSEX_CONFIG_GET_VERSION = 'getv';
-    static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 3) + sizeof(dataCFG) + sizeof(velocityCFG);
+    static const int SYSEX_CONFIG_LEN_V1 = 3 + (sizeof (int) * 3) + sizeof(dataCFG) + sizeof(velocityCFG);
+    static const int SYSEX_CONFIG_LEN_V2 = 3 + (sizeof (int) * 5) + (2 * sizeof(dataCFG)) + (2 * sizeof(velocityCFG));
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
     static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 2);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
   
-    static byte sysexOutArr[SYSEX_CONFIG_LEN];
+    static byte sysexOutArr[SYSEX_CONFIG_LEN_V2];
     static byte UsbSysExBuffer[MAX_SYSEX_MESSAGE_SIZE];
 
     dataCFG * cfgData;
     velocityCFG * cfgVelocity;
+    dataCFG * cfgData2;
+    velocityCFG * cfgVelocity2;
     MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midi2;
     int UsbSysExCursor;
   
   public:
     
-    dadaSysEx(dataCFG * mynv, velocityCFG* velnv, MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midiIn) {
+    dadaSysEx(dataCFG * mynv, velocityCFG* velnv, dataCFG * mynv2, velocityCFG* velnv2, MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midiIn) {
       cfgData = mynv;
       cfgVelocity = velnv;
+      cfgData2 = mynv2;
+      cfgVelocity2 = velnv2;
       midi2 = midiIn;
       UsbSysExCursor = 0;
     };
@@ -84,8 +91,9 @@ class dadaSysEx {
     }
 
 protected:
-  inline void sendVersionToSysEx();
 
+  inline void sendVersionToSysEx();
+  
   inline static void sanitizeForSysex(dataCFG* dataP);
   inline static void sanitizeForSysex(velocityCFG* veloP);
   

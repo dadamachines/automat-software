@@ -101,6 +101,7 @@ class dadaMidiLearn {
 
     void loadEEPROM() {
       nvData = nvStore.read();
+      nvData2 = nvStore2.read();
       statusLED.blink(1, 3, 32);
     };
 

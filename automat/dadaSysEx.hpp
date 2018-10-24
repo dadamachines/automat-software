@@ -35,7 +35,7 @@
 
 #pragma once
 
-byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
+byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN_V2];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
 bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
@@ -46,7 +46,7 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
       // ignore the sysex framing
    }
   
-   if (len < SYSEX_CONFIG_LEN)
+   if (len < SYSEX_CONFIG_LEN_V1)
    {
       if (len != SYSEX_GET_CONFIG_LEN)
       {
@@ -112,9 +112,43 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
       copyConfig(veloP, cfgVelocity);
       velocityStore.write(*cfgVelocity);
    }
-   // I know this line is not really needed, but I don't want it forgotten when we extend this method
    arr += sizeof(velocityCFG);
-
+   
+   if (len >= SYSEX_CONFIG_LEN_V2) 
+   {
+     if (getIntFromArray(arr) != SYSEX_CONFIG_PINS_ALT)
+     {
+         return true;
+     }
+     arr += sizeof(int);
+  
+     dataP = (dataCFG*) arr;
+  
+     if (hasConfigChanged(cfgData2, dataP))
+     {
+        // avoid writing to Flash unless there is a need
+        copyConfig(dataP, cfgData2);
+        nvStore2.write(*cfgData2);
+     }
+     arr += sizeof(dataCFG);
+      
+     if (getIntFromArray(arr) != SYSEX_CONFIG_VELOCITY)
+     {
+         return false;
+     }
+     arr += sizeof(int);
+  
+     veloP = (velocityCFG*) arr;
+     if (hasConfigChanged(cfgVelocity2, veloP))
+     {
+        // avoid writing to Flash unless there is a need
+        copyConfig(veloP, cfgVelocity2);
+        velocityStore2.write(*cfgVelocity2);
+     }
+     // I know this line is not really needed, but I don't want it forgotten when we extend this method
+     arr += sizeof(velocityCFG);
+   }
+   
    return true;
 }
 
@@ -183,24 +217,27 @@ void dadaSysEx::saveConfigToSysEx()
    sanitizeForSysex(veloP);
    outP += sizeof(velocityCFG);
 
+   outP = putIntToArray(outP, SYSEX_CONFIG_PINS_ALT);
+
+   dataP = (dataCFG*) outP;
+   copyConfig(cfgData2, dataP);
+   sanitizeForSysex(dataP);
+   outP += sizeof(dataCFG);
+
+   outP = putIntToArray(outP, SYSEX_CONFIG_VELOCITY_ALT);
+
+   veloP = (velocityCFG*) outP;
+   copyConfig(cfgVelocity2, veloP);
+   sanitizeForSysex(veloP);
+   outP += sizeof(velocityCFG);
+
    *outP = SYSEX_END;
 
    // the midi2.send function probably doesn't do anything with the current hardware, but I'm leaving it in for completeness
    if (midi2 != NULL) {
-       midi2->sendSysEx(SYSEX_CONFIG_LEN, sysexOutArr, true);
+       midi2->sendSysEx(SYSEX_CONFIG_LEN_V2, sysexOutArr, true);
    }
-   MidiUSB_sendSysEx(sysexOutArr, SYSEX_CONFIG_LEN);
-}
-
-void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
-{
-  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
-  {
-    if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
-    {
-      veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
-    }
-  }
+   MidiUSB_sendSysEx(sysexOutArr, SYSEX_CONFIG_LEN_V2);
 }
 
 void dadaSysEx::sendVersionToSysEx()
@@ -222,6 +259,17 @@ void dadaSysEx::sendVersionToSysEx()
        midi2->sendSysEx(SYSEX_VERSION_LEN, sysexOutArr, true);
    }
    MidiUSB_sendSysEx(sysexOutArr, SYSEX_VERSION_LEN);
+}
+
+void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
+{
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
+    {
+      veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
+    }
+  }
 }
 
 void dadaSysEx::sanitizeForSysex(dataCFG* dataP)

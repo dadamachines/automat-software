@@ -8,7 +8,7 @@
 #include <Wire.h>
 
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000300;              // = version 1.3.0
+const int SYSEX_FIRMWARE_VERSION = 0x01000400;              // = version 1.4.0
 
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
@@ -40,15 +40,19 @@ typedef struct {
   byte   alignfiller[8];                                  // for eeprom support   (Justin: I don't think this is needed. 32-bit alignment should be enough)
 } dataCFG;
 dataCFG nvData;
+dataCFG nvData2;
 
 typedef struct {
   byte velocityProgram[OUTPUT_PINS_COUNT];
 } velocityCFG;
 velocityCFG velocityConfig;
+velocityCFG velocityConfig2;
 
 
 FlashStorage(nvStore, dataCFG);
+FlashStorage(nvStore2, dataCFG);
 FlashStorage(velocityStore, velocityCFG);
+FlashStorage(velocityStore2, velocityCFG);
 
 
 int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
@@ -90,7 +94,7 @@ OneButton button(LEARN_MODE_PIN, true);                 // 38 Pin in new layout 
 
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi2);   // DIN Midi Stuff
 dadaMidiLearn midiLearn(&nvData);                       // lern class + load/save from eeprom
-dadaSysEx sysex(&nvData, &velocityConfig, &midi2);
+dadaSysEx sysex(&nvData, &velocityConfig, &nvData2, &velocityConfig2, &midi2);
 
 void setup() {
   Serial1.begin(31250);                                 // set up MIDI baudrate
@@ -117,8 +121,10 @@ void setup() {
   // init();
 
   velocityConfig = velocityStore.read();
+  velocityConfig2 = velocityStore2.read();
   // if uninitialized, this value should be read as -1
   sysex.sanitizeVelocityConfig(&velocityConfig);  
+  sysex.sanitizeVelocityConfig(&velocityConfig2);  
 
   statusLED.blink(20, 30, 32);
 }
@@ -291,6 +297,7 @@ void handleProgramChange(byte channel, byte patch) {
   }
 
   bool configChanged = false;
+  bool configChanged2 = false;
 
   for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
     if ((nvData.midiChannels[pin] == channel) || (nvData.midiChannels[pin] == MIDI_CHANNEL_OMNI)) {     
@@ -299,20 +306,28 @@ void handleProgramChange(byte channel, byte patch) {
         configChanged = true;
       }
     }
+    if ((nvData2.midiChannels[pin] == channel) || (nvData2.midiChannels[pin] == MIDI_CHANNEL_OMNI)) {     
+      if (velocityConfig2.velocityProgram[pin] != patch) {
+        velocityConfig2.velocityProgram[pin] = patch;
+        configChanged2 = true;
+      }
+    }
   }
 
   if (configChanged) {
      velocityStore.write(velocityConfig);
   }
 
+  if (configChanged2) {
+     velocityStore2.write(velocityConfig2);
+  }
+
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
 }
 
-void handleNoteOn(byte pin, byte velocity) {
+void handleNoteOn(byte pin, byte velocity, int velocity_program) {
     solenoids.setOutput(pin);
-
-    int velocity_program = velocityConfig.velocityProgram[pin];
-
+    
     switch (velocity_program) 
     {
         case QUADRATIC_PROGRAM:  // strategy from 1.1.0  quadratic
@@ -368,11 +383,15 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
   for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
     if (nvData.midiPins[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
-        handleNoteOn(i, velocity);
+        handleNoteOn(i, velocity, velocityConfig.velocityProgram[i]);
       }
     } else if (velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM && nvData.midiChannels[i] == channel) {
         humNote[i] = note;
-        handleNoteOn(i, velocity);
+        handleNoteOn(i, velocity, HUM_MOTOR_PROGRAM);
+    } else if (nvData2.midiPins[i] == note) {
+      if (nvData2.midiChannels[i] == channel || nvData2.midiChannels[i] == MIDI_CHANNEL_OMNI) {
+        handleNoteOn(i, velocity, velocityConfig2.velocityProgram[i]);
+      }
     }
   }
 }
@@ -404,6 +423,10 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
                 && (humNote[i] == note)) {
         handleNoteOff(i);
         humNote[i] = 0;
+    } else if (nvData2.midiPins[i] == note) {
+      if (nvData2.midiChannels[i] == channel || nvData2.midiChannels[i] == MIDI_CHANNEL_OMNI) {
+        handleNoteOff(i);
+      }
     }
   }
 }
@@ -435,7 +458,7 @@ void receiveI2CEvent(int len)
         char pin = Wire.read();
         char velocity = Wire.read();
         if (velocity > 0) {
-          handleNoteOn(pin, 127);
+          handleNoteOn(pin, 127, velocityConfig.velocityProgram[pin]);
         } else {
           handleNoteOff(pin);
         }
