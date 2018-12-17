@@ -8,7 +8,7 @@
 #include <Wire.h>
 
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000300;              // = version 1.3.0
+const int SYSEX_FIRMWARE_VERSION = 0x01000400;          // = version 1.4.0
 
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
@@ -21,8 +21,9 @@ const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inve
 const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program
 const int PWM_MOTOR_PROGRAM = 4;                        // The index of the pwm continous program
 const int HUM_MOTOR_PROGRAM = 5;                        // The index of the making the motor hum to a note
+const int FIXED_GATE_PROGRAM = 6;                       // The index of the one-pulse program with a configured gate duration
 const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
-const int MAX_PROGRAM = 5;                              // The index of the maximum valid program
+const int MAX_PROGRAM = 6;                              // The index of the maximum valid program
 
 const byte SYSEX_START = 0xF0;
 const byte SYSEX_END = 0xF7;
@@ -35,22 +36,31 @@ const int I2C_SET = 0;
 
 // NV Data
 typedef struct {
-  byte   midiChannels[OUTPUT_PINS_COUNT];                                // 1-16 or 0 for any
-  byte   midiPins[OUTPUT_PINS_COUNT];                                    // midi notes
+  byte   midiChannels[OUTPUT_PINS_COUNT];                 // 1-16 or 0 for any
+  byte   midiPins[OUTPUT_PINS_COUNT];                     // midi notes
   byte   alignfiller[8];                                  // for eeprom support   (Justin: I don't think this is needed. 32-bit alignment should be enough)
 } dataCFG;
 dataCFG nvData;
 
 typedef struct {
-  byte velocityProgram[OUTPUT_PINS_COUNT];
+  byte   velocityProgram[OUTPUT_PINS_COUNT];
 } velocityCFG;
-velocityCFG velocityConfig;
 
+typedef struct {
+  short  durationConfiguration[OUTPUT_PINS_COUNT];
+} gateCFG;
+
+typedef struct {
+  velocityCFG velocityConfig;
+  gateCFG     gateConfig;
+} programCFG;
+programCFG programData;
 
 FlashStorage(nvStore, dataCFG);
-FlashStorage(velocityStore, velocityCFG);
+FlashStorage(programStore, programCFG);
 
 
+int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
 int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
 int pwm_phase[OUTPUT_PINS_COUNT];                         // This is a repeating counter of PHASE_LIMIT to 0
 int pwm_kick[OUTPUT_PINS_COUNT];                          // An initial loop counter where we leave the output high to overcome inertia in the solenoid
@@ -67,6 +77,7 @@ const int LEVEL_MAX = 20;                                 // Maximum level value
 const int VELOCITY_DIVISOR = 6;                           // Divide the velocity value (1-127) by this number to the the PWM level
 
 const int MAX_MIDI_CHANNEL = 16;
+const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms
 
 int pitchBend[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -90,7 +101,7 @@ OneButton button(LEARN_MODE_PIN, true);                 // 38 Pin in new layout 
 
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi2);   // DIN Midi Stuff
 dadaMidiLearn midiLearn(&nvData);                       // lern class + load/save from eeprom
-dadaSysEx sysex(&nvData, &velocityConfig, &midi2);
+dadaSysEx sysex(&nvData, &programData, &midi2);
 
 void setup() {
   Serial1.begin(31250);                                 // set up MIDI baudrate
@@ -116,9 +127,10 @@ void setup() {
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
-  velocityConfig = velocityStore.read();
+  programData = programStore.read();
   // if uninitialized, this value should be read as -1
-  sysex.sanitizeVelocityConfig(&velocityConfig);  
+  sysex.sanitizeVelocityConfig(&(programData.velocityConfig));  
+  mapFixedDurationConfig();
 
   statusLED.blink(20, 30, 32);
 }
@@ -136,10 +148,11 @@ void loop() {
   }
 
   for(int i = 0 ; i < OUTPUT_PINS_COUNT ; i++){
-    int velocity_program = velocityConfig.velocityProgram[i];
+    int velocity_program = programData.velocityConfig.velocityProgram[i];
 
     switch (velocity_program)
     {
+      case FIXED_GATE_PROGRAM:
       case QUADRATIC_PROGRAM:
       case INVERSE_QUADRATIC_PROGRAM:
         {
@@ -294,15 +307,15 @@ void handleProgramChange(byte channel, byte patch) {
 
   for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
     if ((nvData.midiChannels[pin] == channel) || (nvData.midiChannels[pin] == MIDI_CHANNEL_OMNI)) {     
-      if (velocityConfig.velocityProgram[pin] != patch) {
-        velocityConfig.velocityProgram[pin] = patch;
+      if (programData.velocityConfig.velocityProgram[pin] != patch) {
+        programData.velocityConfig.velocityProgram[pin] = patch;
         configChanged = true;
       }
     }
   }
 
   if (configChanged) {
-     velocityStore.write(velocityConfig);
+     programStore.write(programData);
   }
 
   statusLED.blink(2, 1, 2); // LED Settings (On Time, Off Time, Count)
@@ -311,10 +324,13 @@ void handleProgramChange(byte channel, byte patch) {
 void handleNoteOn(byte pin, byte velocity) {
     solenoids.setOutput(pin);
 
-    int velocity_program = velocityConfig.velocityProgram[pin];
+    int velocity_program = programData.velocityConfig.velocityProgram[pin];
 
     switch (velocity_program) 
     {
+        case FIXED_GATE_PROGRAM:
+          pwm_countdown[pin] = gateDuration[pin]; // set velocity timer
+          break;
         case QUADRATIC_PROGRAM:  // strategy from 1.1.0  quadratic
           pwm_countdown[pin] = velocity * velocity; // set velocity timer
           break;
@@ -370,7 +386,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
-    } else if (velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM && nvData.midiChannels[i] == channel) {
+    } else if (programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM && nvData.midiChannels[i] == channel) {
         humNote[i] = note;
         handleNoteOn(i, velocity);
     }
@@ -399,7 +415,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
-    } else if ((velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM)
+    } else if ((programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM)
                 && (nvData.midiChannels[i] == channel)
                 && (humNote[i] == note)) {
         handleNoteOff(i);
@@ -506,4 +522,20 @@ int calculateLoHumPhase(int pin) {
   return NOTE_PERIOD[note] - iHiPhase;
 }
 
+void mapFixedDurationConfig() {
+  for(int i = 0; i < OUTPUT_PINS_COUNT; ++i) {
+      if(programData.velocityConfig.velocityProgram[i] == FIXED_GATE_PROGRAM) {
+        float duration = programData.gateConfig.durationConfiguration[i];
+        // limit valid values to 1 to 2000 ms
+        if (duration < 1) {
+          duration = 1;
+        } else if (duration > 2000) {
+          duration = 2000;
+        }
+        gateDuration[i] = (duration * LOOP_TIME_FACTOR) + 0.5f;
+      } else {
+        gateDuration[i] = 0;
+      }
+  }
+}
 
