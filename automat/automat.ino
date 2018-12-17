@@ -77,7 +77,7 @@ const int LEVEL_MAX = 20;                                 // Maximum level value
 const int VELOCITY_DIVISOR = 6;                           // Divide the velocity value (1-127) by this number to the the PWM level
 
 const int MAX_MIDI_CHANNEL = 16;
-const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms
+const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
 
 int pitchBend[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
