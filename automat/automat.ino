@@ -31,7 +31,8 @@ const byte SYSEX_END = 0xF7;
 // TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
 // so we can mimic its teletype API. Future address will be 0xDA.
 const int AUTOMAT_ADDR = 0x60;
-const int I2C_SET = 0;
+const int I2C_SET = 0;                                  // prepared set of Output Pin and Velocity
+const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/Note/Velocity
 
 // NV Data
 typedef struct {
@@ -430,8 +431,8 @@ void receiveI2CEvent(int len)
   statusLED.blink(1, 2, 1);
 
   switch (r) {
-    case I2C_SET:
-      if (len = 3) {
+    case I2C_SET:                   // received prepared set of OutputPin and Velocity (=0)
+      if (len = 3) {                            
         char pin = Wire.read();
         char velocity = Wire.read();
         if (velocity > 0) {
@@ -441,6 +442,25 @@ void receiveI2CEvent(int len)
         }
       }
       break;
+    case I2C_MIDI_SET:              // received MIDI Event set containing up to 3 Bytes (=1)
+      if (len = 4) {
+        uint8_t byte1 = Wire.read();
+        uint8_t byte2 = Wire.read();
+        uint8_t byte3 = Wire.read();
+
+        uint8_t header = byte1 & 0xF0;
+        switch (header) {
+          case 0x80:  // Note-off
+              handleNoteOff(1 + (byte1 & 0x0F), byte2, byte3);
+              break;
+          case 0x90:  // Note-on
+              handleNoteOn(1 + (byte1 & 0x0F), byte2, byte3);
+              break;
+          default:
+              break;                              // skip other MIDI Event Types
+        }
+      }
+      break;  
   }
 }
 
@@ -505,5 +525,3 @@ int calculateLoHumPhase(int pin) {
 
   return NOTE_PERIOD[note] - iHiPhase;
 }
-
-
