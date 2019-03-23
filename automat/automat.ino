@@ -8,6 +8,8 @@
 #include <Wire.h>
 
 // disable the PWM_SUPPORT by default.   Don't include it as part of the official releases
+// If you turn this feature on and upload it to your automat, you assume all responsibility for any impact it may
+// have on the automat hardware
 #define PWM_SUPPORT 0
 
 // constants
