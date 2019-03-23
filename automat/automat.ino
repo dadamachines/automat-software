@@ -8,7 +8,7 @@
 #include <Wire.h>
 
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000400;          // = version 1.4.0
+const int SYSEX_FIRMWARE_VERSION = 0x01000401;          // = version 1.4.1
 
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
