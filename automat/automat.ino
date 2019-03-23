@@ -7,8 +7,11 @@
 #include <OneButton.h>
 #include <Wire.h>
 
+// disable the PWM_SUPPORT by default.   Don't include it as part of the official releases
+#define PWM_SUPPORT 0
+
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000401;          // = version 1.4.1
+const int SYSEX_FIRMWARE_VERSION = 0x01000402;          // = version 1.4.2
 
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
@@ -18,9 +21,11 @@ const int ACTIVITY_LED = 13;                            // activity led is still
 const int ALWAYS_ON_PROGRAM = 0;                        // The index of the default always on program
 const int QUADRATIC_PROGRAM = 1;                        // The index of the quadratic one pulse program
 const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inverse quadratic one pulse program
+#if PWM_SUPPORT
 const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program
 const int PWM_MOTOR_PROGRAM = 4;                        // The index of the pwm continous program
 const int HUM_MOTOR_PROGRAM = 5;                        // The index of the making the motor hum to a note
+#endif
 const int FIXED_GATE_PROGRAM = 6;                       // The index of the one-pulse program with a configured gate duration
 const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
 const int MAX_PROGRAM = 6;                              // The index of the maximum valid program
@@ -170,6 +175,7 @@ void loop() {
         }
         break;
 
+#if PWM_SUPPORT
       case PWM_PROGRAM:
       case PWM_MOTOR_PROGRAM:
         {
@@ -237,6 +243,7 @@ void loop() {
           }
         }
         break;
+  #endif
       case ALWAYS_ON_PROGRAM:
       default:
         break;
@@ -345,6 +352,7 @@ void handleNoteOn(byte pin, byte velocity) {
             pwm_countdown[pin] = NO_COUNTDOWN;
           }
           break;
+#if PWM_SUPPORT
         case PWM_PROGRAM: // true pwm
         case PWM_MOTOR_PROGRAM: // continuous PWM
           pwm_level[pin] = (velocity / VELOCITY_DIVISOR) + 1;
@@ -366,6 +374,7 @@ void handleNoteOn(byte pin, byte velocity) {
             pwm_level[pin] = calculateLoHumPhase(pin);
           }  // otherwise let it calculate the phase at the end of the cycle
           break;
+#endif
         case ALWAYS_ON_PROGRAM:
         default: // no velocity control
          break;
@@ -386,9 +395,11 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
+#if PWM_SUPPORT
     } else if (programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM && nvData.midiChannels[i] == channel) {
         humNote[i] = note;
         handleNoteOn(i, velocity);
+#endif
     }
   }
 }
@@ -415,11 +426,13 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
+#if PWM_SUPPORT
     } else if ((programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM)
                 && (nvData.midiChannels[i] == channel)
                 && (humNote[i] == note)) {
         handleNoteOff(i);
         humNote[i] = 0;
+#endif
     }
   }
 }
