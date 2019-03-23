@@ -36,6 +36,9 @@
 #include <MIDI.h>
 #include <MIDIUSB.h>
 
+const byte SYSEX_START = 0xF0;
+const byte SYSEX_END = 0xF7;
+
 
 class dadaSysEx {
 

@@ -49,6 +49,7 @@ public:
    static void handlePitchBend(byte channel, int bend);
    static void handleHumNoteOn(byte pin, byte note);
    static bool handleHumNoteOff(byte pin, byte note);
+   static void handleAllNotesOff();
 };
 
 const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program

@@ -222,6 +222,15 @@ void PWMManager::handleHumNoteOn(byte pin, byte note) {
   humNote[pin] = note;
 }
 
+void PWMManager::handleAllNotesOff() {
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i) {
+    pwm_kick[i] = 0;
+    pwm_phase[i] = 0;
+    pwm_level[i] = 0;
+    humNote[i] = 0;
+  }
+}
+
 #endif
 
 

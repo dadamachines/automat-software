@@ -8,7 +8,7 @@
 #include <Wire.h>
 
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000402;          // = version 1.4.2
+const int SYSEX_FIRMWARE_VERSION = 0x01000403;          // = version 1.4.3
 
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
@@ -23,8 +23,10 @@ const int FIXED_GATE_PROGRAM = 6;                       // The index of the one-
 const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
 const int MAX_PROGRAM = 6;                              // The index of the maximum valid program
 
-const byte SYSEX_START = 0xF0;
-const byte SYSEX_END = 0xF7;
+enum {
+  MIDI_CC_MOD_WHEEL = 1,
+  MIDI_CC_ALL_NOTES_OFF = 123
+};
 
 // i2c constants
 // TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
@@ -341,8 +343,10 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
 }
 
 void handleControlChange(byte channel, byte number, byte value) {
-  if (number == 1) {
+  if (number == MIDI_CC_MOD_WHEEL) {
     handleModWheel(channel, value);
+  } else if (number == MIDI_CC_ALL_NOTES_OFF) {
+    handleAllNotesOff();
   }
 }
 
@@ -351,6 +355,17 @@ void handleModWheel(byte channel, byte mod) {
   PWMManager::handleModWheel(channel, mod);
 #endif
 }
+
+void handleAllNotesOff() {
+    for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
+        handleNoteOff(i);
+    }
+
+#if PWM_SUPPORT
+  PWMManager::handleAllNotesOff();
+#endif
+}
+
 
 void handlePitchBend(byte channel, int bend) {
 #if PWM_SUPPORT
