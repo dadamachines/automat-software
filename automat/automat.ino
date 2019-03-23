@@ -66,15 +66,20 @@ programCFG programData;
 FlashStorage(nvStore, dataCFG);
 FlashStorage(programStore, programCFG);
 
+const int MAX_MIDI_CHANNEL = 16;
+
+int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
+const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
+const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
+const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
 
 int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
-int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
+
+#if PWM_SUPPORT
 int pwm_phase[OUTPUT_PINS_COUNT];                         // This is a repeating counter of PHASE_LIMIT to 0
 int pwm_kick[OUTPUT_PINS_COUNT];                          // An initial loop counter where we leave the output high to overcome inertia in the solenoid
 int pwm_level[OUTPUT_PINS_COUNT];                         // A counter that indicates how many loop counts we should leave the output high for.
 const int COUNTDOWN_CONT = 2147483647;                    // number of loops where we apply the PWM for continous mode > 10 days
-const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
-const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
 const int PHASE_KICK = 64;                                // Number of loops where we leave the output high to overcome inertia in the solenoid
 
 const int PHASE_LIMIT = 32;                               // The number of loop counts we use to execute a PWM cycle.   If this value is too large, the solendoids will emit an audible noise during PWM
@@ -83,14 +88,13 @@ const int DOWN_PHASE_MAX = 21;                            // The maximum number 
 const int LEVEL_MAX = 20;                                 // Maximum level value for PWM so 120 to 127 is equal to no PWM
 const int VELOCITY_DIVISOR = 6;                           // Divide the velocity value (1-127) by this number to the the PWM level
 
-const int MAX_MIDI_CHANNEL = 16;
-const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
 
 int pitchBend[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int humNote[OUTPUT_PINS_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 #include "humTiming.h"
+#endif
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -409,9 +413,11 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
   pwm_countdown[pin] = 0;
+#if PWM_SUPPORT
   pwm_kick[pin] = 0;
   pwm_phase[pin] = 0;
   pwm_level[pin] = 0;
+#endif
 }
 
 void handleNoteOff(byte channel, byte note, byte velocity) {
@@ -446,13 +452,17 @@ void handleControlChange(byte channel, byte number, byte value) {
 }
 
 void handleModWheel(byte channel, byte mod) {
+#if PWM_SUPPORT
   modWheel[channel] = mod;
   modWheel[MIDI_CHANNEL_OMNI] = mod;
+#endif
 }
 
 void handlePitchBend(byte channel, int bend) {
+#if PWM_SUPPORT
   pitchBend[channel] = bend;
   pitchBend[MIDI_CHANNEL_OMNI] = bend;
+#endif
 }
 
 void receiveI2CEvent(int len)
@@ -498,6 +508,7 @@ void handleSysEx(byte * arr, unsigned len) {
   }
 }
 
+#if PWM_SUPPORT
 int calculateTotalHumPhase(int pin) {
   int note = humNote[pin];
   int ret = NOTE_PERIOD[note];
@@ -536,6 +547,7 @@ int calculateLoHumPhase(int pin) {
 
   return NOTE_PERIOD[note] - iHiPhase;
 }
+#endif
 
 void mapFixedDurationConfig() {
   for(int i = 0; i < OUTPUT_PINS_COUNT; ++i) {
