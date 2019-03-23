@@ -7,11 +7,6 @@
 #include <OneButton.h>
 #include <Wire.h>
 
-// disable the PWM_SUPPORT by default.   Don't include it as part of the official releases
-// If you turn this feature on and upload it to your automat, you assume all responsibility for any impact it may
-// have on the automat hardware
-#define PWM_SUPPORT 0
-
 // constants
 const int SYSEX_FIRMWARE_VERSION = 0x01000402;          // = version 1.4.2
 
@@ -23,11 +18,7 @@ const int ACTIVITY_LED = 13;                            // activity led is still
 const int ALWAYS_ON_PROGRAM = 0;                        // The index of the default always on program
 const int QUADRATIC_PROGRAM = 1;                        // The index of the quadratic one pulse program
 const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inverse quadratic one pulse program
-#if PWM_SUPPORT
-const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program
-const int PWM_MOTOR_PROGRAM = 4;                        // The index of the pwm continous program
-const int HUM_MOTOR_PROGRAM = 5;                        // The index of the making the motor hum to a note
-#endif
+/* programs 3 to 5 are reserved by the PWMManager */
 const int FIXED_GATE_PROGRAM = 6;                       // The index of the one-pulse program with a configured gate duration
 const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
 const int MAX_PROGRAM = 6;                              // The index of the maximum valid program
@@ -75,29 +66,13 @@ const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops
 
 int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
 
-#if PWM_SUPPORT
-int pwm_phase[OUTPUT_PINS_COUNT];                         // This is a repeating counter of PHASE_LIMIT to 0
-int pwm_kick[OUTPUT_PINS_COUNT];                          // An initial loop counter where we leave the output high to overcome inertia in the solenoid
-int pwm_level[OUTPUT_PINS_COUNT];                         // A counter that indicates how many loop counts we should leave the output high for.
-const int COUNTDOWN_CONT = 2147483647;                    // number of loops where we apply the PWM for continous mode > 10 days
-const int PHASE_KICK = 64;                                // Number of loops where we leave the output high to overcome inertia in the solenoid
-
-const int PHASE_LIMIT = 32;                               // The number of loop counts we use to execute a PWM cycle.   If this value is too large, the solendoids will emit an audible noise during PWM
-                                                          // 64 = approximately 1 ms
-const int DOWN_PHASE_MAX = 21;                            // The maximum number of loop counts where the output is held low for a PWM cycle   Values between 13 and 15 are acceptable for a PHASE_LIMIT of 32
-const int LEVEL_MAX = 20;                                 // Maximum level value for PWM so 120 to 127 is equal to no PWM
-const int VELOCITY_DIVISOR = 6;                           // Divide the velocity value (1-127) by this number to the the PWM level
-
-
-int pitchBend[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int humNote[OUTPUT_PINS_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-#include "humTiming.h"
-#endif
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
+
+#include "PWMManager.h"
+#include "PWMManager.hpp"
+
 
 #include "dadaStatusLED.h"
 dadaStatusLED statusLED(ACTIVITY_LED);                    // led controller
@@ -184,70 +159,8 @@ void loop() {
 #if PWM_SUPPORT
       case PWM_PROGRAM:
       case PWM_MOTOR_PROGRAM:
-        {
-          // repeating pulse width via velocity
-          // If the user has used a very high velocity, we will bypass PWM
-          // Also, we will set a limit of pwm_countdown time to not keep the PWM on 
-          //  once the solenoid has made contact with the drum, etc.
-          if((pwm_countdown[i] == 0) || (pwm_level[i] == 0)) {
-              continue;
-          }
-          
-          // First thing we are going to do is leave the solenoids for 'kick' time 
-          // to get them moving and overcoming inertia
-          if(pwm_kick[i] > 0) {
-            pwm_kick[i]--;
-            continue;    
-          }
-          
-          // step through the PWM phase sequence
-          pwm_phase[i]--;
-          pwm_countdown[i]--;
-      
-          if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
-            // Restart the phase sequence with the output set high
-            solenoids.setOutput(i);
-      
-            if (pwm_countdown == 0) {
-              // we are done the PWM part of the note.   Leave the output high until note off.
-              pwm_phase[i] = 0;              
-            }
-            else {
-              // Restart the PWM counter
-              pwm_phase[i] = PHASE_LIMIT;      
-            }
-          }
-          else if (pwm_phase[i] == (DOWN_PHASE_MAX - pwm_level[i])) {
-            // we are in the low part of the PWM cycle
-            solenoids.clearOutput(i);
-          }
-        }
-        break;
-
       case HUM_MOTOR_PROGRAM:
-        {
-          // repeating pulse width tuned to a pitch with modulation
-          if(pwm_level[i] == 0) {
-              continue;
-          }
-
-          // step through the PWM phase sequence
-          pwm_phase[i]--;
-
-          if ((pwm_phase[i] == 0) || (pwm_countdown == 0)) {
-            // Restart the PWM counter
-            pwm_phase[i] = calculateTotalHumPhase(i);
-            pwm_level[i] = calculateLoHumPhase(i);
-            if (pwm_level[i] > 0) {
-              // Restart the phase sequence with the output set high
-              solenoids.setOutput(i);
-            }
-          }
-          else if (pwm_phase[i] == pwm_level[i]) {
-            // we are in the low part of the PWM cycle
-            solenoids.clearOutput(i);
-          }
-        }
+        PWMManager::handlePinLoop(i, velocity_program);
         break;
   #endif
       case ALWAYS_ON_PROGRAM:
@@ -361,24 +274,8 @@ void handleNoteOn(byte pin, byte velocity) {
 #if PWM_SUPPORT
         case PWM_PROGRAM: // true pwm
         case PWM_MOTOR_PROGRAM: // continuous PWM
-          pwm_level[pin] = (velocity / VELOCITY_DIVISOR) + 1;
-          if(pwm_level[pin] > LEVEL_MAX) {
-            pwm_countdown[pin] = 0;
-            pwm_phase[pin] = 0;
-            pwm_kick[pin] = 0;
-            pwm_level[pin] = 0;
-          }
-          else {
-            pwm_countdown[pin] = (velocity_program == PWM_MOTOR_PROGRAM) ? COUNTDOWN_CONT : COUNTDOWN_START; 
-            pwm_phase[pin] = PHASE_LIMIT;
-            pwm_kick[pin] = PHASE_KICK;
-          }
-          break;
         case HUM_MOTOR_PROGRAM:
-          if (pwm_level[pin] == 0) {
-            pwm_phase[pin] = calculateTotalHumPhase(pin);
-            pwm_level[pin] = calculateLoHumPhase(pin);
-          }  // otherwise let it calculate the phase at the end of the cycle
+          PWMManager::handleNoteOn(velocity_program, pin, velocity);
           break;
 #endif
         case ALWAYS_ON_PROGRAM:
@@ -403,7 +300,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       }
 #if PWM_SUPPORT
     } else if (programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM && nvData.midiChannels[i] == channel) {
-        humNote[i] = note;
+        PWMManager::handleHumNoteOn(i, note);
         handleNoteOn(i, velocity);
 #endif
     }
@@ -414,9 +311,7 @@ void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
   pwm_countdown[pin] = 0;
 #if PWM_SUPPORT
-  pwm_kick[pin] = 0;
-  pwm_phase[pin] = 0;
-  pwm_level[pin] = 0;
+  PWMManager::handleNoteOff(pin);
 #endif
 }
 
@@ -436,10 +331,10 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
       }
 #if PWM_SUPPORT
     } else if ((programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM)
-                && (nvData.midiChannels[i] == channel)
-                && (humNote[i] == note)) {
-        handleNoteOff(i);
-        humNote[i] = 0;
+                && (nvData.midiChannels[i] == channel)) {
+        if (PWMManager::handleHumNoteOff(i, note)) {
+          handleNoteOff(i);
+        }
 #endif
     }
   }
@@ -453,15 +348,13 @@ void handleControlChange(byte channel, byte number, byte value) {
 
 void handleModWheel(byte channel, byte mod) {
 #if PWM_SUPPORT
-  modWheel[channel] = mod;
-  modWheel[MIDI_CHANNEL_OMNI] = mod;
+  PWMManager::handleModWheel(channel, mod);
 #endif
 }
 
 void handlePitchBend(byte channel, int bend) {
 #if PWM_SUPPORT
-  pitchBend[channel] = bend;
-  pitchBend[MIDI_CHANNEL_OMNI] = bend;
+  PWMManager::handlePitchBend(channel, bend);
 #endif
 }
 
@@ -507,47 +400,6 @@ void handleSysEx(byte * arr, unsigned len) {
        statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
   }
 }
-
-#if PWM_SUPPORT
-int calculateTotalHumPhase(int pin) {
-  int note = humNote[pin];
-  int ret = NOTE_PERIOD[note];
-
-  if (ret != 0) {
-    int channel = nvData.midiChannels[pin];
-
-    if (pitchBend[channel] != 0) {
-       float adjust =  pitchBend[channel] / 65536.f;
-
-       ret -= (ret * adjust);
-       if (ret < MAX_NOTE_PHASE[note] + MIN_NOTE_PHASE) {
-         ret = MAX_NOTE_PHASE[note] + MIN_NOTE_PHASE;
-       }
-    }
-  }
-
-  return ret;
-}
-
-int calculateLoHumPhase(int pin) {
-  int channel = nvData.midiChannels[pin];
-  int note = humNote[pin];
-
-  if (NOTE_PERIOD[note] == 0) {
-    // the math should still result in 0, but just in case...
-    return 0;
-  }
-
-  float hiPhase = NOTE_PHASE_SCALE[note] * modWheel[channel];
-  int iHiPhase = MIN_NOTE_PHASE + (int) (hiPhase + 0.5f);
-
-  if (iHiPhase > MAX_NOTE_PHASE[note]) {
-    iHiPhase = MAX_NOTE_PHASE[note];
-  }
-
-  return NOTE_PERIOD[note] - iHiPhase;
-}
-#endif
 
 void mapFixedDurationConfig() {
   for(int i = 0; i < OUTPUT_PINS_COUNT; ++i) {
