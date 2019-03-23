@@ -40,9 +40,9 @@
 class dadaSysEx {
 
   private:
-    // 'dA' = H64H41 which is way above the currently allocated Sysex manufacturer IDs so this shouldn't conflict with any existing IDs
-    static const int SYSEX_CONFIG_HEADER = 'dAdA';
-    static const int SYSEX_VERSION_HEADER = 'dAdV';
+    // '!=' = H21H3D which is the official Sysex manufacturer IDs assigned to DaDa Machines
+    static const int SYSEX_CONFIG_HEADER = '!=dA';
+    static const int SYSEX_VERSION_HEADER = '!=dV';
     static const int SYSEX_CONFIG_PINS = 'pins';
     static const int SYSEX_CONFIG_VELOCITY = 'velo';
     static const int SYSEX_CONFIG_GATE = 'gate';
