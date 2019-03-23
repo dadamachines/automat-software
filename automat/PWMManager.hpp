@@ -48,6 +48,7 @@ const int VELOCITY_DIVISOR = 6;                           // Divide the velocity
 int pitchBend[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int modWheel[MAX_MIDI_CHANNEL + 1] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int humNote[OUTPUT_PINS_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
 
 
 int PWMManager::calculateTotalHumPhase(int pin) {
@@ -204,6 +205,7 @@ void PWMManager::handlePitchBend(byte channel, int bend) {
 }
 
 void PWMManager::handleNoteOff(byte pin) {
+  pwm_countdown[pin] = 0;
   pwm_kick[pin] = 0;
   pwm_phase[pin] = 0;
   pwm_level[pin] = 0;

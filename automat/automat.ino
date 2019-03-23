@@ -61,7 +61,7 @@ FlashStorage(programStore, programCFG);
 
 const int MAX_MIDI_CHANNEL = 16;
 
-int pwm_countdown[OUTPUT_PINS_COUNT];                     // This is the total number of loops left where we will execute a PWM
+int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
 const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
 const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
 const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
@@ -145,15 +145,15 @@ void loop() {
       case INVERSE_QUADRATIC_PROGRAM:
         {
         // new single pulse width via velocity
-          if(pwm_countdown[i] > 1 ){
-              if(pwm_countdown[i] < NO_COUNTDOWN){
-                pwm_countdown[i]--;
+          if(loop_countdown[i] > 1 ){
+              if(loop_countdown[i] < NO_COUNTDOWN){
+                loop_countdown[i]--;
               }
               continue;
           }
-          if(pwm_countdown[i] > 0) {
+          if(loop_countdown[i] > 0) {
             solenoids.clearOutput(i);
-            pwm_countdown[i]=0;
+            loop_countdown[i]=0;
           }
         }
         break;
@@ -257,20 +257,20 @@ void handleNoteOn(byte pin, byte velocity) {
     switch (velocity_program) 
     {
         case FIXED_GATE_PROGRAM:
-          pwm_countdown[pin] = gateDuration[pin]; // set velocity timer
+          loop_countdown[pin] = gateDuration[pin]; // set velocity timer
           break;
         case QUADRATIC_PROGRAM:  // strategy from 1.1.0  quadratic
-          pwm_countdown[pin] = velocity * velocity; // set velocity timer
+          loop_countdown[pin] = velocity * velocity; // set velocity timer
           break;
         case INVERSE_QUADRATIC_PROGRAM: // inverse quadratic
           if (velocity < 120)
           {
              velocity = 120 - velocity;
-             pwm_countdown[pin] = COUNTDOWN_START - ((velocity * velocity) * 7/ 8);
+             loop_countdown[pin] = COUNTDOWN_START - ((velocity * velocity) * 7/ 8);
           }
           else
           {
-            pwm_countdown[pin] = NO_COUNTDOWN;
+            loop_countdown[pin] = NO_COUNTDOWN;
           }
           break;
 #if PWM_SUPPORT
@@ -311,7 +311,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 
 void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
-  pwm_countdown[pin] = 0;
+  loop_countdown[pin] = 0;
 #if PWM_SUPPORT
   PWMManager::handleNoteOff(pin);
 #endif
