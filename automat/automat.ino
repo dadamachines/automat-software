@@ -8,34 +8,9 @@
 #include <Wire.h>
 #include <Limits.h>
 
+#include "automatConstants.h"
+
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000500;          // = version 1.5.0
-
-const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
-const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
-const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic
-const int ACTIVITY_LED = 13;                            // activity led is still on D13 which is connected to PA17 > which means Pin 9 on MKRZero
-
-const int MAX_MIN_PROGRAM = 0;                          // The index of the default max/min program
-const int ALWAYS_ON_PROGRAM = 1;                        // The index of the always on program
-const int QUADRATIC_PROGRAM = 2;                        // The index of the quadratic one pulse program
-const int INVERSE_QUADRATIC_PROGRAM = 3;                // The index of the inverse quadratic one pulse program
-const int FIXED_GATE_PROGRAM = 4;                       // The index of the one-pulse program with a configured gate duration
-const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
-#if PWM_SUPPORT
-/* programs 5 to 7 are reserved by the PWMManager */
-const int MAX_PROGRAM = 7;                              // The index of the maximum valid program
-#else
-const int MAX_PROGRAM = 4;                              // The index of the maximum valid program
-#endif
-
-enum {
-  MIDI_CC_MOD_WHEEL = 1,
-  MIDI_CC_GENERAL_PURPOSE_1 = 16,
-  MIDI_CC_GENERAL_PURPOSE_2 = 17,
-  MIDI_CC_ALL_NOTES_OFF = 123
-};
-
 // i2c constants
 // TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
 // so we can mimic its teletype API. Future address will be 0xDA.
@@ -74,11 +49,12 @@ const int MAX_MIDI_CHANNEL = 16;
 
 unsigned long milli_stop[OUTPUT_PINS_COUNT];               // time at which to stop note for program 0
 int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
+int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
+
 const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
 const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
 const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
 
-int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
 
 
 #include "solenoidSPI.h"
@@ -86,6 +62,13 @@ SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layou
 
 #include "PWMManager.h"
 #include "PWMManager.hpp"
+
+#if PWM_SUPPORT
+/* programs 5 to 7 are reserved by the PWMManager */
+const int MAX_PROGRAM = 7;                              // The index of the maximum valid program
+#else
+const int MAX_PROGRAM = 4;                              // The index of the maximum valid program
+#endif
 
 
 #include "dadaStatusLED.h"

@@ -30,6 +30,7 @@
 */
 
 #include "solenoidSPI.h"
+#include "automatConstants.h"
 
 /*! The constructor takes two parameters.  The first is an SPI class
     pointer.  This is the address of an SPI object (either the default
@@ -88,7 +89,7 @@ void SOLSPI::clearOutput(uint8_t num) {
 
 void SOLSPI::singlePin(uint8_t num, bool on_or_off) {
   uint16_t backup_outputState = outputState;
-  for (int i = 0 ; i < 12 ; i++) {
+  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
     if (num == i && on_or_off) {
       backup_outputState |= (1 << translatePinNumber(i));
     } else {
@@ -102,8 +103,12 @@ void SOLSPI::singlePin(uint8_t num, bool on_or_off) {
 }
 
 uint8_t  SOLSPI::translatePinNumber(uint8_t n)  {
-  const uint8_t nums[12] = {15, 13, 12, 11, 7, 3, 14, 10, 9, 6, 5, 4};
-  if (n > 11)
+#if AUTOMAT_MINI
+  const uint8_t nums[OUTPUT_PINS_COUNT] = {15, 11, 10, 14, 12, 13};
+#else 
+  const uint8_t nums[OUTPUT_PINS_COUNT] = {15, 13, 12, 11, 7, 3, 14, 10, 9, 6, 5, 4};
+#endif
+  if (n >= OUTPUT_PINS_COUNT)
     return 8;
   else
     return nums[n];
