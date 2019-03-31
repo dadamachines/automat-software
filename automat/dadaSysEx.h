@@ -47,7 +47,7 @@ class dadaSysEx {
     static const int SYSEX_CONFIG_HEADER = '!=dA';
     static const int SYSEX_VERSION_HEADER = '!=dV';
     static const int SYSEX_CONFIG_PINS = 'pins';
-    static const int SYSEX_CONFIG_VELOCITY = 'velo';
+    static const int SYSEX_CONFIG_VELOCITY = 'vlty';
     static const int SYSEX_CONFIG_GATE = 'gate';
     static const int SYSEX_CONFIG_GET_CONFIG = 'getc';
     static const int SYSEX_CONFIG_GET_VERSION = 'getv';

@@ -231,12 +231,18 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
   {
     if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
     {
-      veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
+      veloP->velocityProgram[i] = MAX_MIN_PROGRAM;
+    }
+    if( veloP->min_milli[i] > MAX_MIN_INFINITE) {
+      veloP->min_milli[i] = MAX_MIN_INFINITE;
+    }
+    if( veloP->max_milli[i] > MAX_MIN_INFINITE) {
+      veloP->max_milli[i] = MAX_MIN_INFINITE;
     }
     if(veloP->max_milli[i] < 1 || veloP->min_milli[i] > veloP->max_milli[i])
     {
-      veloP->min_milli[i] = 127;
-      veloP->max_milli[i] = 127;
+      veloP->min_milli[i] = MAX_MIN_INFINITE;
+      veloP->max_milli[i] = MAX_MIN_INFINITE;
     }
   }
 }
@@ -341,6 +347,14 @@ bool dadaSysEx::hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
       {
         return true;
       }
+      if(config1->min_milli[i] != config2->min_milli[i])
+      {
+        return true;
+      }
+      if(config1->max_milli[i] != config2->max_milli[i])
+      {
+        return true;
+      }
     }
 
     return false;
@@ -351,6 +365,8 @@ inline void dadaSysEx::copyConfig(velocityCFG* src, velocityCFG* dest)
     for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       dest->velocityProgram[i] = src->velocityProgram[i];
+      dest->min_milli[i] = src->min_milli[i];
+      dest->max_milli[i] = src->max_milli[i];
     }
 }
 

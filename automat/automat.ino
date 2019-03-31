@@ -40,6 +40,7 @@ enum {
 const int AUTOMAT_ADDR = 0x60;
 const int I2C_SET = 0;                                  // prepared set of Output Pin and Velocity
 const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/Note/Velocity
+const int MAX_MIN_INFINITE = 127;
 
 // NV Data
 typedef struct {
@@ -279,7 +280,7 @@ void handleNoteOn(byte pin, byte velocity) {
         case MAX_MIN_PROGRAM:
         {
           int8_t min_milli = programData.velocityConfig.min_milli[pin];
-          if (min_milli == 127) {
+          if (min_milli == MAX_MIN_INFINITE) {
             milli_stop[pin] = ULONG_MAX;
           } else {
             float min =  min_milli/ 126.f;
