@@ -233,6 +233,11 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
     {
       veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
     }
+    if(veloP->max_milli[i] < 1 || veloP->min_milli[i] > veloP->max_milli[i])
+    {
+      veloP->min_milli[i] = 127;
+      veloP->max_milli[i] = 127;
+    }
   }
 }
 
@@ -287,12 +292,7 @@ void dadaSysEx::sendVersionToSysEx()
 
 void dadaSysEx::sanitizeForSysex(dataCFG* dataP)
 {
-     // we need to avoid any values > 127 for sysex
-     for (int j = 0; j < 8; ++j)
-     {
-       dataP->alignfiller[j] = 0;
-     }
-     
+     // we need to avoid any values > 127 for sysex     
      for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
      {
        if(dataP->midiChannels[i] < 0 || dataP->midiChannels[i] > 127)
@@ -300,9 +300,9 @@ void dadaSysEx::sanitizeForSysex(dataCFG* dataP)
          dataP->midiChannels[i] = MIDI_CHANNEL_OMNI;
        }
        
-       if(dataP->midiPins[i] < 0 || dataP->midiPins[i] > 127)
+       if(dataP->midiNotes[i] < 0 || dataP->midiNotes[i] > 127)
        {
-         dataP->midiPins[i] = 0;
+         dataP->midiNotes[i] = 0;
        }
      }
 }
@@ -315,7 +315,7 @@ bool dadaSysEx::hasConfigChanged(dataCFG* config1, dataCFG* config2)
       {
         return true;
       }
-      if(config1->midiPins[i] != config2->midiPins[i])
+      if(config1->midiNotes[i] != config2->midiNotes[i])
       {
         return true;
       }
@@ -329,12 +329,7 @@ inline void dadaSysEx::copyConfig(dataCFG* src, dataCFG* dest)
     for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       dest->midiChannels[i] = src->midiChannels[i];
-      dest->midiPins[i] = src->midiPins[i];
-    }
-
-    for (int j = 0; j < 8; ++j)
-    {
-      dest->alignfiller[j] = 0;
+      dest->midiNotes[i] = src->midiNotes[i];
     }
 }
     

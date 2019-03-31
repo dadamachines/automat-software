@@ -58,7 +58,7 @@ class dadaMidiLearn {
     void clearMap() {
       for (int i = 0 ; i < 12 ; i++) {
         nv->midiChannels[i] = 0;  // no midi filter
-        nv->midiPins[i]=128;      // invalid note
+        nv->midiNotes[i]=128;      // invalid note
       }
     };
 
@@ -69,7 +69,7 @@ class dadaMidiLearn {
 
       if (mode == 0) {
         for (byte i = 0 ; i < 12 ; i++) {
-         nv->midiPins[i] = note + i;
+         nv->midiNotes[i] = note + i;
         }
         active = false;
         saveEEPROM();
@@ -77,7 +77,7 @@ class dadaMidiLearn {
       }
 
       if (mode == 1) {
-        nv->midiPins[counter] = note;
+        nv->midiNotes[counter] = note;
         nv->midiChannels[counter] = ch;
         counter++;
         if (counter > 11) {

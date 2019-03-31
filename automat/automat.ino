@@ -6,6 +6,7 @@
 #include <SPI.h>
 #include <OneButton.h>
 #include <Wire.h>
+#include <Limits.h>
 
 // constants
 const int SYSEX_FIRMWARE_VERSION = 0x01000500;          // = version 1.5.0
@@ -43,13 +44,14 @@ const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/N
 // NV Data
 typedef struct {
   byte   midiChannels[OUTPUT_PINS_COUNT];                 // 1-16 or 0 for any
-  byte   midiPins[OUTPUT_PINS_COUNT];                     // midi notes
-  byte   alignfiller[8];                                  // for eeprom support   (Justin: I don't think this is needed. 32-bit alignment should be enough)
+  byte   midiNotes[OUTPUT_PINS_COUNT];                     // midi notes
 } dataCFG;
 dataCFG nvData;
 
 typedef struct {
   byte   velocityProgram[OUTPUT_PINS_COUNT];
+  int8_t min_milli[OUTPUT_PINS_COUNT];
+  int8_t max_milli[OUTPUT_PINS_COUNT];
 } velocityCFG;
 
 typedef struct {
@@ -67,6 +69,7 @@ FlashStorage(programStore, programCFG);
 
 const int MAX_MIDI_CHANNEL = 16;
 
+unsigned long milli_stop[OUTPUT_PINS_COUNT];               // time at which to stop note for program 0
 int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
 const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
 const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
@@ -133,6 +136,8 @@ void loop() {
   midi2.read();
   button.tick();
   statusLED.tick();
+  unsigned long now = 0;
+  
 
   // handle blinking port on learning in advanced mode
   if(midiLearn.active) {
@@ -146,6 +151,15 @@ void loop() {
 
     switch (velocity_program)
     {
+      case MAX_MIN_PROGRAM:
+        if (now == 0) {
+          now = millis();
+        }
+        if(milli_stop[i] > 0 && milli_stop[i] < now) {
+          solenoids.clearOutput(i);
+          milli_stop[i] = 0;
+        }
+        break;
       case FIXED_GATE_PROGRAM:
       case QUADRATIC_PROGRAM:
       case INVERSE_QUADRATIC_PROGRAM:
@@ -159,7 +173,7 @@ void loop() {
           }
           if(loop_countdown[i] > 0) {
             solenoids.clearOutput(i);
-            loop_countdown[i]=0;
+            loop_countdown[i] = 0;
           }
         }
         break;
@@ -262,6 +276,23 @@ void handleNoteOn(byte pin, byte velocity) {
 
     switch (velocity_program) 
     {
+        case MAX_MIN_PROGRAM:
+        {
+          int8_t min_milli = programData.velocityConfig.min_milli[pin];
+          if (min_milli == 127) {
+            milli_stop[pin] = ULONG_MAX;
+          } else {
+            float min =  min_milli/ 126.f;
+            float max = programData.velocityConfig.max_milli[pin] / 126.f;
+            float range = max - min;
+            float fraction = velocity / 127.f;
+      
+            // A fraction of 1 second, the velocity mapped to the specified time range.
+            unsigned long duration = (float)1000 * powf(min + (range * fraction), 3);
+            milli_stop[pin] = millis() + duration;
+          }
+          break;
+        }
         case FIXED_GATE_PROGRAM:
           loop_countdown[pin] = gateDuration[pin]; // set velocity timer
           break;
@@ -302,7 +333,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
   statusLED.blink(1, 2, 1);
 
   for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
-    if (nvData.midiPins[i] == note) {
+    if (nvData.midiNotes[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
@@ -318,6 +349,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
   loop_countdown[pin] = 0;
+  milli_stop[pin] = 0;
 #if PWM_SUPPORT
   PWMManager::handleNoteOff(pin);
 #endif
@@ -333,7 +365,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   statusLED.blink(1, 2, 1);
   
   for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
-    if (nvData.midiPins[i] == note) {
+    if (nvData.midiNotes[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
