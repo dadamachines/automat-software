@@ -48,7 +48,7 @@ FlashStorage(programStore, programCFG);
 unsigned long milli_stop[OUTPUT_PINS_COUNT];               // time at which to stop note for program 0
 int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
 int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
-
+byte max_min_map[OUTPUT_PINS_COUNT][128];
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -100,6 +100,7 @@ void setup() {
   // if uninitialized, this value should be read as -1
   sysex.sanitizeVelocityConfig(&(programData.velocityConfig));  
   mapFixedDurationConfig();
+  initMaxMinMap();
 
   statusLED.blink(20, 30, 32);
 }
@@ -251,17 +252,10 @@ void handleNoteOn(byte pin, byte velocity) {
         case MAX_MIN_PROGRAM:
         {
           int8_t min_milli = programData.velocityConfig.min_milli[pin];
-          if (min_milli == MAX_MIN_INFINITE) {
+          if (min_milli == MAX_MIN_INFINITE || velocity == 127) {
             milli_stop[pin] = ULONG_MAX;
           } else {
-            float min =  min_milli/ 126.f;
-            float max = programData.velocityConfig.max_milli[pin] / 126.f;
-            float range = max - min;
-            float fraction = velocity / 127.f;
-      
-            // A fraction of 1 second, the velocity mapped to the specified time range.
-            unsigned long duration = (float)1000 * powf(min + (range * fraction), 3);
-            milli_stop[pin] = millis() + duration;
+            milli_stop[pin] = millis() + max_min_map[pin][velocity];
           }
           break;
         }
@@ -388,6 +382,7 @@ void handleMinConfig(byte channel, byte val) {
       if (programData.velocityConfig.max_milli[i] < programData.velocityConfig.min_milli[i]) {
         programData.velocityConfig.max_milli[i] = programData.velocityConfig.min_milli[i];
       }
+      initMaxMinMap(i, programData.velocityConfig.min_milli[i], programData.velocityConfig.max_milli[i]);
     }
   }
 }
@@ -400,6 +395,7 @@ void handleMaxConfig(byte channel, int val) {
       if (programData.velocityConfig.max_milli[i] < programData.velocityConfig.min_milli[i]) {
         programData.velocityConfig.min_milli[i] = programData.velocityConfig.max_milli[i];
       }
+      initMaxMinMap(i, programData.velocityConfig.min_milli[i], programData.velocityConfig.max_milli[i]);
     }
   }
 }
@@ -491,5 +487,52 @@ void mapFixedDurationConfig() {
         gateDuration[i] = 0;
       }
   }
+}
+
+void initMaxMinMap() {
+   for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
+     int min_range = programData.velocityConfig.min_milli[pin];
+     int max_range = programData.velocityConfig.max_milli[pin];
+     initMaxMinMap(pin, min_range, max_range);
+   }
+}
+
+void initMaxMinMap(int pin, int min_range, int max_range) 
+{
+   if (min_range == MAX_MIN_INFINITE || max_range == MAX_MIN_INFINITE) {
+     for (int i = 0; i < 127; i++) {
+        max_min_map[pin][i] = ULONG_MAX;
+     }    
+     return;
+   }
+  
+   int range = ((1000 - 126) * (max_range - min_range) / 126.f) + 0.5f;
+   int base_val = ((1000 - 126) * min_range / 126.f) + 0.5f;
+   
+   for (int i = 0; i < 127; i++) {
+      // Map the input range of 0..126 to a value between 0..1.
+      float fraction = (float)i / 126;
+      
+      // Map 0..1 to 0..1, but let it grow exponentially.
+      float y = pow(fraction, 3);
+      
+      // Convert to a value between 0..1000. We add the base
+      // value to assure that we produce growing values; otherwise
+      // the first numbers in the sequence would be rounded to the
+      // same values.
+      float v = i + (y * range) + base_val;
+      
+      // Round 500..1000 in 10 steps increment. 
+      if (v >= 500) {
+        v = floor(v / 10) * 10;
+      // Round 150..499 in 5 steps increment. 
+      }
+      else if (v >= 150) {
+        v = floor(v / 5) * 5;
+      }
+
+      max_min_map[pin][i] = v;
+   }    
+   max_min_map[pin][127] = ULONG_MAX;
 }
 

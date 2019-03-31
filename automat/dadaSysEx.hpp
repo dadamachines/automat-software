@@ -36,6 +36,7 @@
 #pragma once
 
 extern void mapFixedDurationConfig();
+extern void initMaxMinMap();
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
@@ -138,6 +139,7 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 
    if (programChanged) 
    {
+      initMaxMinMap();
       programStore.write(*cfgProgram);
    }
    
