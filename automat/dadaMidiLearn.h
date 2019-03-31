@@ -69,7 +69,8 @@ class dadaMidiLearn {
 
       if (mode == 0) {
         for (byte i = 0 ; i < 12 ; i++) {
-         nv->midiNotes[i] = note + i;
+          nv->midiNotes[i] = note + i;
+          nv->midiChannels[i] = ch;
         }
         active = false;
         saveEEPROM();
