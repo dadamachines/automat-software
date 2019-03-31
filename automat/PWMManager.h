@@ -52,9 +52,9 @@ public:
    static void handleAllNotesOff();
 };
 
-const int PWM_PROGRAM = 3;                              // The index of the pwm multi-pulse program
-const int PWM_MOTOR_PROGRAM = 4;                        // The index of the pwm continous program
-const int HUM_MOTOR_PROGRAM = 5;                        // The index of the making the motor hum to a note
+const int PWM_PROGRAM = 5;                              // The index of the pwm multi-pulse program
+const int PWM_MOTOR_PROGRAM = 6;                        // The index of the pwm continous program
+const int HUM_MOTOR_PROGRAM = 7;                        // The index of the making the motor hum to a note
 #endif
 
 

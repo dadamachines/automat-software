@@ -8,20 +8,25 @@
 #include <Wire.h>
 
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000403;          // = version 1.4.3
+const int SYSEX_FIRMWARE_VERSION = 0x01000500;          // = version 1.5.0
 
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
 const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic
 const int ACTIVITY_LED = 13;                            // activity led is still on D13 which is connected to PA17 > which means Pin 9 on MKRZero
 
-const int ALWAYS_ON_PROGRAM = 0;                        // The index of the default always on program
-const int QUADRATIC_PROGRAM = 1;                        // The index of the quadratic one pulse program
-const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inverse quadratic one pulse program
-/* programs 3 to 5 are reserved by the PWMManager */
-const int FIXED_GATE_PROGRAM = 6;                       // The index of the one-pulse program with a configured gate duration
+const int MAX_MIN_PROGRAM = 0;                          // The index of the default max/min program
+const int ALWAYS_ON_PROGRAM = 1;                        // The index of the always on program
+const int QUADRATIC_PROGRAM = 2;                        // The index of the quadratic one pulse program
+const int INVERSE_QUADRATIC_PROGRAM = 3;                // The index of the inverse quadratic one pulse program
+const int FIXED_GATE_PROGRAM = 4;                       // The index of the one-pulse program with a configured gate duration
 const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
-const int MAX_PROGRAM = 6;                              // The index of the maximum valid program
+#if PWM_SUPPORT
+/* programs 5 to 7 are reserved by the PWMManager */
+const int MAX_PROGRAM = 7;                              // The index of the maximum valid program
+#else
+const int MAX_PROGRAM = 4;                              // The index of the maximum valid program
+#endif
 
 enum {
   MIDI_CC_MOD_WHEEL = 1,
