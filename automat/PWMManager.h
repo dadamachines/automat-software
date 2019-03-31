@@ -33,10 +33,7 @@
 #ifndef _PWMMANAGER_H
 #define _PWMMANAGER_H
 
-// disable the PWM_SUPPORT by default.   Don't include it as part of the official releases
-// If you turn this feature on and upload it to your automat, you assume all responsibility for any impact it may
-// have on the automat hardware
-#define PWM_SUPPORT 0
+#include "automatConstants.h"
 
 class PWMManager {
 public:
@@ -51,10 +48,6 @@ public:
    static bool handleHumNoteOff(byte pin, byte note);
    static void handleAllNotesOff();
 };
-
-const int PWM_PROGRAM = 5;                              // The index of the pwm multi-pulse program
-const int PWM_MOTOR_PROGRAM = 6;                        // The index of the pwm continous program
-const int HUM_MOTOR_PROGRAM = 7;                        // The index of the making the motor hum to a note
 #endif
 
 

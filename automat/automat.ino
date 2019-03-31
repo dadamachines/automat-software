@@ -45,16 +45,9 @@ programCFG programData;
 FlashStorage(nvStore, dataCFG);
 FlashStorage(programStore, programCFG);
 
-const int MAX_MIDI_CHANNEL = 16;
-
 unsigned long milli_stop[OUTPUT_PINS_COUNT];               // time at which to stop note for program 0
 int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
 int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
-
-const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
-const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
-const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
-
 
 
 #include "solenoidSPI.h"
@@ -62,13 +55,6 @@ SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layou
 
 #include "PWMManager.h"
 #include "PWMManager.hpp"
-
-#if PWM_SUPPORT
-/* programs 5 to 7 are reserved by the PWMManager */
-const int MAX_PROGRAM = 7;                              // The index of the maximum valid program
-#else
-const int MAX_PROGRAM = 4;                              // The index of the maximum valid program
-#endif
 
 
 #include "dadaStatusLED.h"
