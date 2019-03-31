@@ -31,6 +31,8 @@ const int MAX_PROGRAM = 4;                              // The index of the maxi
 
 enum {
   MIDI_CC_MOD_WHEEL = 1,
+  MIDI_CC_GENERAL_PURPOSE_1 = 16,
+  MIDI_CC_GENERAL_PURPOSE_2 = 17,
   MIDI_CC_ALL_NOTES_OFF = 123
 };
 
@@ -386,6 +388,10 @@ void handleControlChange(byte channel, byte number, byte value) {
     handleModWheel(channel, value);
   } else if (number == MIDI_CC_ALL_NOTES_OFF) {
     handleAllNotesOff();
+  } else if (number == MIDI_CC_GENERAL_PURPOSE_1) {
+    handleMinConfig(channel, value);
+  } else if (number == MIDI_CC_GENERAL_PURPOSE_2) {
+    handleMaxConfig(channel, value);
   }
 }
 
@@ -405,6 +411,29 @@ void handleAllNotesOff() {
 #endif
 }
 
+void handleMinConfig(byte channel, byte val) {
+  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
+    if (programData.velocityConfig.velocityProgram[i] == MAX_MIN_PROGRAM &&
+         ((nvData.midiChannels[i] == channel) || (nvData.midiChannels[i] == MIDI_CHANNEL_OMNI))) {
+      programData.velocityConfig.min_milli[i] = val;          
+      if (programData.velocityConfig.max_milli[i] < programData.velocityConfig.min_milli[i]) {
+        programData.velocityConfig.max_milli[i] = programData.velocityConfig.min_milli[i];
+      }
+    }
+  }
+}
+
+void handleMaxConfig(byte channel, int val) {
+  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
+    if (programData.velocityConfig.velocityProgram[i] == MAX_MIN_PROGRAM &&
+         ((nvData.midiChannels[i] == channel) || (nvData.midiChannels[i] == MIDI_CHANNEL_OMNI))) {
+      programData.velocityConfig.max_milli[i] = val;          
+      if (programData.velocityConfig.max_milli[i] < programData.velocityConfig.min_milli[i]) {
+        programData.velocityConfig.min_milli[i] = programData.velocityConfig.max_milli[i];
+      }
+    }
+  }
+}
 
 void handlePitchBend(byte channel, int bend) {
 #if PWM_SUPPORT
