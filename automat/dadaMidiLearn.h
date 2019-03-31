@@ -56,7 +56,7 @@ class dadaMidiLearn {
     };
 
     void clearMap() {
-      for (int i = 0 ; i < 12 ; i++) {
+      for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
         nv->midiChannels[i] = 0;  // no midi filter
         nv->midiNotes[i]=128;      // invalid note
       }
@@ -68,7 +68,7 @@ class dadaMidiLearn {
       // nv->midiChannel = ch;
 
       if (mode == 0) {
-        for (byte i = 0 ; i < 12 ; i++) {
+        for (byte i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
           nv->midiNotes[i] = note + i;
           nv->midiChannels[i] = ch;
         }
@@ -81,7 +81,7 @@ class dadaMidiLearn {
         nv->midiNotes[counter] = note;
         nv->midiChannels[counter] = ch;
         counter++;
-        if (counter > 11) {
+        if (counter >= OUTPUT_PINS_COUNT) {
           active = false;
           saveEEPROM();
         }
@@ -102,8 +102,20 @@ class dadaMidiLearn {
 
     void loadEEPROM() {
       nvData = nvStore.read();
+      if((nvData.midiChannels[0] & 0xFF) == 0xFF && (nvData.midiNotes[0] & 0xFF) == 0xFF) {
+        // EEPROM data is not initialized.   Load defaults
+        loadDefaults();
+      }
       statusLED.blink(1, 3, 32);
     };
+
+    void loadDefaults() {
+       const byte note = 36; // C2 GM MIDI Bass Drum
+       for (byte i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
+         nv->midiNotes[i] = note + i;
+         nv->midiChannels[i] = MIDI_CHANNEL_OMNI;
+      }
+    }
 
 };
 
