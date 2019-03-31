@@ -36,18 +36,22 @@
 #include <MIDI.h>
 #include <MIDIUSB.h>
 
+const byte SYSEX_START = 0xF0;
+const byte SYSEX_END = 0xF7;
+
 
 class dadaSysEx {
 
   private:
-    // 'dA' = H64H41 which is way above the currently allocated Sysex manufacturer IDs so this shouldn't conflict with any existing IDs
-    static const int SYSEX_CONFIG_HEADER = 'dAdA';
-    static const int SYSEX_VERSION_HEADER = 'dAdV';
+    // '!=' = H21H3D which is the official Sysex manufacturer IDs assigned to DaDa Machines
+    static const int SYSEX_CONFIG_HEADER = '!=dA';
+    static const int SYSEX_VERSION_HEADER = '!=dV';
     static const int SYSEX_CONFIG_PINS = 'pins';
     static const int SYSEX_CONFIG_VELOCITY = 'velo';
+    static const int SYSEX_CONFIG_GATE = 'gate';
     static const int SYSEX_CONFIG_GET_CONFIG = 'getc';
     static const int SYSEX_CONFIG_GET_VERSION = 'getv';
-    static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 3) + sizeof(dataCFG) + sizeof(velocityCFG);
+    static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 4) + sizeof(dataCFG) + sizeof(velocityCFG) + sizeof(gateCFG);
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
     static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 2);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
@@ -56,15 +60,15 @@ class dadaSysEx {
     static byte UsbSysExBuffer[MAX_SYSEX_MESSAGE_SIZE];
 
     dataCFG * cfgData;
-    velocityCFG * cfgVelocity;
+    programCFG * cfgProgram;
     MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midi2;
     int UsbSysExCursor;
   
   public:
     
-    dadaSysEx(dataCFG * mynv, velocityCFG* velnv, MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midiIn) {
+    dadaSysEx(dataCFG * mynv, programCFG* velnv, MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midiIn) {
       cfgData = mynv;
-      cfgVelocity = velnv;
+      cfgProgram = velnv;
       midi2 = midiIn;
       UsbSysExCursor = 0;
     };
@@ -88,12 +92,16 @@ protected:
 
   inline static void sanitizeForSysex(dataCFG* dataP);
   inline static void sanitizeForSysex(velocityCFG* veloP);
+  inline static void encodeForSysex(gateCFG* gateP);
+  inline static void decodeForSysex(gateCFG* gateP);
   
   inline static bool hasConfigChanged(dataCFG* config1, dataCFG* config2);
   inline static bool hasConfigChanged(velocityCFG* config1, velocityCFG* config2);
+  inline static bool hasConfigChanged(gateCFG* config1, gateCFG* config2);
   
   inline static void copyConfig(dataCFG* src, dataCFG* dest);
   inline static void copyConfig(velocityCFG* src, velocityCFG* dest);
+  inline static void copyConfig(gateCFG* src, gateCFG* dest);
       
   inline static void MidiUSB_sendSysEx(byte *data, size_t len);
   

@@ -35,6 +35,7 @@
 
 #pragma once
 
+extern void mapFixedDurationConfig();
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
@@ -106,15 +107,40 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    arr += sizeof(int);
 
    velocityCFG* veloP = (velocityCFG*) arr;
-   if (hasConfigChanged(cfgVelocity, veloP))
+   bool programChanged = false;
+   if (hasConfigChanged(&(cfgProgram->velocityConfig), veloP))
    {
       // avoid writing to Flash unless there is a need
-      copyConfig(veloP, cfgVelocity);
-      velocityStore.write(*cfgVelocity);
+      copyConfig(veloP, &(cfgProgram->velocityConfig));
+      programChanged = true;
    }
-   // I know this line is not really needed, but I don't want it forgotten when we extend this method
+
    arr += sizeof(velocityCFG);
 
+   if (getIntFromArray(arr) != SYSEX_CONFIG_GATE)
+   {
+       return false;
+   }
+   arr += sizeof(int);
+
+   gateCFG* gateP = (gateCFG*) arr;
+   decodeForSysex(gateP);
+   if (hasConfigChanged(&(cfgProgram->gateConfig), gateP))
+   {
+      // avoid writing to Flash unless there is a need
+      copyConfig(gateP, &(cfgProgram->gateConfig));
+      programChanged = true;
+      mapFixedDurationConfig();
+   }
+
+   // I know this line is not really needed, but I don't want it forgotten when we extend this method
+   arr += sizeof(gateCFG);
+
+   if (programChanged) 
+   {
+      programStore.write(*cfgProgram);
+   }
+   
    return true;
 }
 
@@ -179,9 +205,16 @@ void dadaSysEx::saveConfigToSysEx()
    outP = putIntToArray(outP, SYSEX_CONFIG_VELOCITY);
 
    velocityCFG* veloP = (velocityCFG*) outP;
-   copyConfig(cfgVelocity, veloP);
+   copyConfig(&(cfgProgram->velocityConfig), veloP);
    sanitizeForSysex(veloP);
    outP += sizeof(velocityCFG);
+
+   outP = putIntToArray(outP, SYSEX_CONFIG_GATE);
+
+   gateCFG* gateP = (gateCFG*) outP;
+   copyConfig(&(cfgProgram->gateConfig), gateP);
+   encodeForSysex(gateP);
+   outP += sizeof(gateCFG);
 
    *outP = SYSEX_END;
 
@@ -200,6 +233,34 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
     {
       veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
     }
+  }
+}
+
+void dadaSysEx::encodeForSysex(gateCFG* gateP)
+{ // we need to avoid having the high bit set in any byte
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    if(gateP->durationConfiguration[i] < 0)
+    {
+      gateP->durationConfiguration[i] = 0;
+    }
+    else if(gateP->durationConfiguration[i] > 16383)
+    { // this value can only be 14 bits max
+      gateP->durationConfiguration[i] = 16383;
+    }
+    int lowerPart = gateP->durationConfiguration[i] & 0x007F;
+    int upperPart = gateP->durationConfiguration[i] & 0x3F80;
+    gateP->durationConfiguration[i] = lowerPart | (upperPart << 1);
+  }
+}
+
+void dadaSysEx::decodeForSysex(gateCFG* gateP)
+{
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    int lowerPart = gateP->durationConfiguration[i] & 0x007F;
+    int upperPart = gateP->durationConfiguration[i] & 0x7F00;
+    gateP->durationConfiguration[i] = lowerPart | (upperPart >> 1);
   }
 }
 
@@ -231,7 +292,7 @@ void dadaSysEx::sanitizeForSysex(dataCFG* dataP)
      {
        dataP->alignfiller[j] = 0;
      }
-    
+     
      for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
      {
        if(dataP->midiChannels[i] < 0 || dataP->midiChannels[i] > 127)
@@ -295,6 +356,27 @@ inline void dadaSysEx::copyConfig(velocityCFG* src, velocityCFG* dest)
     for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       dest->velocityProgram[i] = src->velocityProgram[i];
+    }
+}
+
+bool dadaSysEx::hasConfigChanged(gateCFG* config1, gateCFG* config2)
+{
+    for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+    {
+      if(config1->durationConfiguration[i] != config2->durationConfiguration[i])
+      {
+        return true;
+      }
+    }
+
+    return false;
+}
+  
+inline void dadaSysEx::copyConfig(gateCFG* src, gateCFG* dest)
+{
+    for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+    {
+      dest->durationConfiguration[i] = src->durationConfiguration[i];
     }
 }
   
