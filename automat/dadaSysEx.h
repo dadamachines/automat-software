@@ -52,6 +52,7 @@ class dadaSysEx {
     static const int SYSEX_CONFIG_GATE = 'gate';
     static const int SYSEX_CONFIG_GET_CONFIG = 'getc';
     static const int SYSEX_CONFIG_GET_VERSION = 'getv';
+    static const int SYSEX_MIN_CONFIG_LEN = 3 + (sizeof (int) * 4) + sizeof(dataCFG) + sizeof(velocityCFG) ;
     static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 5) + sizeof(dataCFG) + sizeof(velocityCFG) + sizeof(gateCFG);
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
     static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 3);
@@ -64,7 +65,9 @@ class dadaSysEx {
     programCFG * cfgProgram;
     MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midi2;
     int UsbSysExCursor;
-  
+
+    static bool safeToRead(byte * now, const byte* before, unsigned bufferLen, unsigned readLen);
+    
   public:
     
     dadaSysEx(dataCFG * mynv, programCFG* velnv, MIDI_NAMESPACE::MidiInterface<HardwareSerial>* midiIn) {

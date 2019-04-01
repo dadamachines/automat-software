@@ -40,15 +40,20 @@ extern void initMaxMinMap();
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
+bool dadaSysEx::safeToRead(byte * now, const byte* before, unsigned bufferLen, unsigned readLen) {
+  return (now - before) <= bufferLen - readLen; 
+}
+
 bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 {
+   const byte* startFrame = arr;
    if(len > 1 && (*arr == SYSEX_START))
    {
       arr++;
       // ignore the sysex framing
    }
   
-   if (len < SYSEX_CONFIG_LEN)
+   if (len < SYSEX_MIN_CONFIG_LEN)
    {
       if (len != SYSEX_GET_CONFIG_LEN)
       {
@@ -126,24 +131,24 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 
    arr += sizeof(velocityCFG);
 
-   if (getIntFromArray(arr) != SYSEX_CONFIG_GATE)
+   if (safeToRead(arr, startFrame, len, sizeof(gateCFG) + sizeof(int)) && getIntFromArray(arr) == SYSEX_CONFIG_GATE)
    {
-       return false;
+     // gate is an optional config section
+     arr += sizeof(int);
+  
+     gateCFG* gateP = (gateCFG*) arr;
+     decodeForSysex(gateP);
+     if (hasConfigChanged(&(cfgProgram->gateConfig), gateP))
+     {
+        // avoid writing to Flash unless there is a need
+        copyConfig(gateP, &(cfgProgram->gateConfig));
+        programChanged = true;
+        mapFixedDurationConfig();
+     }
+  
+     // I know this line is not really needed, but I don't want it forgotten when we extend this method
+     arr += sizeof(gateCFG);
    }
-   arr += sizeof(int);
-
-   gateCFG* gateP = (gateCFG*) arr;
-   decodeForSysex(gateP);
-   if (hasConfigChanged(&(cfgProgram->gateConfig), gateP))
-   {
-      // avoid writing to Flash unless there is a need
-      copyConfig(gateP, &(cfgProgram->gateConfig));
-      programChanged = true;
-      mapFixedDurationConfig();
-   }
-
-   // I know this line is not really needed, but I don't want it forgotten when we extend this method
-   arr += sizeof(gateCFG);
 
    if (programChanged) 
    {
