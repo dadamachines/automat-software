@@ -105,7 +105,21 @@ class dadaMidiLearn {
       if((nvData.midiChannels[0] & 0xFF) == 0xFF && (nvData.midiNotes[0] & 0xFF) == 0xFF) {
         // EEPROM data is not initialized.   Load defaults
         loadDefaults();
+      } else {
+        bool allZero = true;
+
+        for(int i = 0; i < OUTPUT_PINS_COUNT; ++i) {
+          if (nvData.midiNotes[i] != 0) {
+            allZero = false;
+            break;
+          }
+        }
+
+        if(allZero) {
+          loadDefaults();
+        }
       }
+
       statusLED.blink(1, 3, 32);
     };
 

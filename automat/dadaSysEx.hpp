@@ -91,6 +91,14 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    }
    arr += sizeof(int);
 
+   const int numPins = getIntFromArray(arr) & 0x0FF;
+   if (numPins != OUTPUT_PINS_COUNT)
+   {
+       return false;
+   }
+   arr += sizeof(int);
+
+
    dataCFG* dataP = (dataCFG*) arr;
 
    if (hasConfigChanged(cfgData, dataP))
@@ -199,6 +207,18 @@ void dadaSysEx::saveConfigToSysEx()
 
    outP = putIntToArray(outP, SYSEX_CONFIG_PINS);
 
+   *outP++ = 0;
+
+#if PWM_SUPPORT
+   *outP++ = 1;
+#else
+   *outP++ = 0;
+#endif
+
+   *outP++ = 0;
+
+   *outP++ = OUTPUT_PINS_COUNT;
+
    dataCFG* dataP = (dataCFG*) outP;
    copyConfig(cfgData, dataP);
    sanitizeForSysex(dataP);
@@ -288,6 +308,12 @@ void dadaSysEx::sendVersionToSysEx()
    outP = putIntToArray(outP, SYSEX_VERSION_HEADER);
 
    outP = putIntToArray(outP, SYSEX_FIRMWARE_VERSION);
+
+#if PWM_SUPPORT
+   outP = putIntToArray(outP, 0x010000 | OUTPUT_PINS_COUNT);
+#else 
+   outP = putIntToArray(outP, OUTPUT_PINS_COUNT);
+#endif
 
    *outP = SYSEX_END;
 

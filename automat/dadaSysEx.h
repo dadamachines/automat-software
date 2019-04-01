@@ -35,6 +35,7 @@
 
 #include <MIDI.h>
 #include <MIDIUSB.h>
+#include "automatConstants.h"
 
 const byte SYSEX_START = 0xF0;
 const byte SYSEX_END = 0xF7;
@@ -51,9 +52,9 @@ class dadaSysEx {
     static const int SYSEX_CONFIG_GATE = 'gate';
     static const int SYSEX_CONFIG_GET_CONFIG = 'getc';
     static const int SYSEX_CONFIG_GET_VERSION = 'getv';
-    static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 4) + sizeof(dataCFG) + sizeof(velocityCFG) + sizeof(gateCFG);
+    static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 5) + sizeof(dataCFG) + sizeof(velocityCFG) + sizeof(gateCFG);
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
-    static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 2);
+    static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 3);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
   
     static byte sysexOutArr[SYSEX_CONFIG_LEN];
