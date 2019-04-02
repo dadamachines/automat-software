@@ -37,6 +37,8 @@
 
 extern void mapFixedDurationConfig();
 extern void initMaxMinMap();
+extern void handleMinConfig(byte pin, int val);
+extern void handleMaxConfig(byte pin, int val);
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
@@ -57,7 +59,10 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    {
       if (len != SYSEX_GET_CONFIG_LEN)
       {
-         return false;
+         if (len != SYSEX_SET_MIN_MAX_LEN)
+         {
+             return false;
+         }
       }
    }
 
@@ -67,6 +72,19 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 
    if (getIntFromArray(arr) != SYSEX_CONFIG_HEADER)
    {
+       if (getIntFromArray(arr) == SYSEX_MIN_SET_HEADER) {
+         arr += sizeof(int);
+         int pin = *arr++;
+         int value = *arr++;
+         handleMinConfig(pin, value);        
+         return true;
+       } else if (getIntFromArray(arr) == SYSEX_MAX_SET_HEADER) {
+         arr += sizeof(int);
+         int pin = *arr++;
+         int value = *arr++;
+         handleMaxConfig(pin, value);        
+         return true;
+       }
        return false;
    }
    arr += sizeof(int);
@@ -260,10 +278,10 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
     {
       veloP->velocityProgram[i] = MAX_MIN_PROGRAM;
     }
-    if( veloP->min_milli[i] > MAX_MIN_INFINITE) {
+    if( veloP->min_milli[i] > 127) {
       veloP->min_milli[i] = MAX_MIN_INFINITE;
     }
-    if( veloP->max_milli[i] > MAX_MIN_INFINITE) {
+    if( veloP->max_milli[i] > 127) {
       veloP->max_milli[i] = MAX_MIN_INFINITE;
     }
     if(veloP->max_milli[i] < 1 || veloP->min_milli[i] > veloP->max_milli[i])

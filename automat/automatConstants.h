@@ -65,6 +65,7 @@ enum {
 const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
 const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
 const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
+const int MAX_MIN_INFINITE = 0;
 
 const int MAX_MIDI_CHANNEL = 16;
 

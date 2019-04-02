@@ -17,7 +17,6 @@
 const int AUTOMAT_ADDR = 0x60;
 const int I2C_SET = 0;                                  // prepared set of Output Pin and Velocity
 const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/Note/Velocity
-const int MAX_MIN_INFINITE = 127;
 
 // NV Data
 typedef struct {
@@ -251,8 +250,8 @@ void handleNoteOn(byte pin, byte velocity) {
     {
         case MAX_MIN_PROGRAM:
         {
-          int8_t min_milli = programData.velocityConfig.min_milli[pin];
-          if (min_milli == MAX_MIN_INFINITE || velocity == 127) {
+          int8_t max_milli = programData.velocityConfig.max_milli[pin];
+          if (max_milli == MAX_MIN_INFINITE || velocity == 127) {
             milli_stop[pin] = ULONG_MAX;
           } else {
             milli_stop[pin] = millis() + max_min_map[pin][velocity];
@@ -347,14 +346,13 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
 }
 
 void handleControlChange(byte channel, byte number, byte value) {
-  if (number == MIDI_CC_MOD_WHEEL) {
-    handleModWheel(channel, value);
-  } else if (number == MIDI_CC_ALL_NOTES_OFF) {
-    handleAllNotesOff();
-  } else if (number == MIDI_CC_GENERAL_PURPOSE_1) {
-    handleMinConfig(channel, value);
-  } else if (number == MIDI_CC_GENERAL_PURPOSE_2) {
-    handleMaxConfig(channel, value);
+  switch (number) {
+    case MIDI_CC_MOD_WHEEL:
+      handleModWheel(channel, value);
+      break;
+    case MIDI_CC_ALL_NOTES_OFF:
+      handleAllNotesOff();
+      break;
   }
 }
 
@@ -374,29 +372,25 @@ void handleAllNotesOff() {
 #endif
 }
 
-void handleMinConfig(byte channel, byte val) {
-  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
-    if (programData.velocityConfig.velocityProgram[i] == MAX_MIN_PROGRAM &&
-         ((nvData.midiChannels[i] == channel) || (nvData.midiChannels[i] == MIDI_CHANNEL_OMNI))) {
-      programData.velocityConfig.min_milli[i] = val;          
-      if (programData.velocityConfig.max_milli[i] < programData.velocityConfig.min_milli[i]) {
-        programData.velocityConfig.max_milli[i] = programData.velocityConfig.min_milli[i];
-      }
-      initMaxMinMap(i, programData.velocityConfig.min_milli[i], programData.velocityConfig.max_milli[i]);
+void handleMinConfig(byte pin, int val) {
+  if (pin < OUTPUT_PINS_COUNT && programData.velocityConfig.velocityProgram[pin] == MAX_MIN_PROGRAM) {
+    programData.velocityConfig.min_milli[pin] = val;          
+    if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
+      programData.velocityConfig.max_milli[pin] = programData.velocityConfig.min_milli[pin];
     }
+    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin]);
+    statusLED.blink(1, 2, 1);
   }
 }
 
-void handleMaxConfig(byte channel, int val) {
-  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
-    if (programData.velocityConfig.velocityProgram[i] == MAX_MIN_PROGRAM &&
-         ((nvData.midiChannels[i] == channel) || (nvData.midiChannels[i] == MIDI_CHANNEL_OMNI))) {
-      programData.velocityConfig.max_milli[i] = val;          
-      if (programData.velocityConfig.max_milli[i] < programData.velocityConfig.min_milli[i]) {
-        programData.velocityConfig.min_milli[i] = programData.velocityConfig.max_milli[i];
-      }
-      initMaxMinMap(i, programData.velocityConfig.min_milli[i], programData.velocityConfig.max_milli[i]);
+void handleMaxConfig(byte pin, int val) {
+  if (pin < OUTPUT_PINS_COUNT && (programData.velocityConfig.velocityProgram[pin] == MAX_MIN_PROGRAM)) {
+    programData.velocityConfig.max_milli[pin] = val;          
+    if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
+      programData.velocityConfig.min_milli[pin] = programData.velocityConfig.max_milli[pin];
     }
+    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin]);
+    statusLED.blink(1, 2, 1);
   }
 }
 
@@ -499,7 +493,7 @@ void initMaxMinMap() {
 
 void initMaxMinMap(int pin, int min_range, int max_range) 
 {
-   if (min_range == MAX_MIN_INFINITE || max_range == MAX_MIN_INFINITE) {
+   if (max_range == MAX_MIN_INFINITE) {
      for (int i = 0; i < 127; i++) {
         max_min_map[pin][i] = ULONG_MAX;
      }    

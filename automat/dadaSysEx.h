@@ -47,6 +47,8 @@ class dadaSysEx {
     // '!=' = H21H3D which is the official Sysex manufacturer IDs assigned to DaDa Machines
     static const int SYSEX_CONFIG_HEADER = '!=dA';
     static const int SYSEX_VERSION_HEADER = '!=dV';
+    static const int SYSEX_MIN_SET_HEADER = '!=mm';
+    static const int SYSEX_MAX_SET_HEADER = '!=mM';
     static const int SYSEX_CONFIG_PINS = 'pins';
     static const int SYSEX_CONFIG_VELOCITY = 'vlty';
     static const int SYSEX_CONFIG_GATE = 'gate';
@@ -55,6 +57,7 @@ class dadaSysEx {
     static const int SYSEX_MIN_CONFIG_LEN = 3 + (sizeof (int) * 4) + sizeof(dataCFG) + sizeof(velocityCFG) ;
     static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 5) + sizeof(dataCFG) + sizeof(velocityCFG) + sizeof(gateCFG);
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
+    static const int SYSEX_SET_MIN_MAX_LEN = 3 + sizeof(int) + 2;
     static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 3);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
   
