@@ -500,12 +500,12 @@ void initMaxMinMap(int pin, int min_range, int max_range)
      return;
    }
   
-   int range = ((1000 - 126) * (max_range - min_range) / 126.f) + 0.5f;
-   int base_val = ((1000 - 126) * min_range / 126.f) + 0.5f;
+   int range = ((1000 - 127) * (float)(max_range - min_range) / 127.f) + 0.5f;
+   int base_val = ((1000 - 127) * min_range / 127.f) + 0.5f;
    
    for (int i = 0; i < 127; i++) {
-      // Map the input range of 0..126 to a value between 0..1.
-      float fraction = (float)i / 126;
+      // Map the input range of 0..127 to a value between 0..1.
+      float fraction = (float)i / 127.f;
       
       // Map 0..1 to 0..1, but let it grow exponentially.
       float y = pow(fraction, 3);
@@ -514,15 +514,15 @@ void initMaxMinMap(int pin, int min_range, int max_range)
       // value to assure that we produce growing values; otherwise
       // the first numbers in the sequence would be rounded to the
       // same values.
-      float v = i + (y * range) + base_val;
+      int v = i + (y * range) + base_val;
       
       // Round 500..1000 in 10 steps increment. 
       if (v >= 500) {
-        v = floor(v / 10) * 10;
+        v -= v % 10;
       // Round 150..499 in 5 steps increment. 
       }
       else if (v >= 150) {
-        v = floor(v / 5) * 5;
+        v -= v % 5;
       }
 
       max_min_map[pin][i] = v;
