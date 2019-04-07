@@ -29,6 +29,7 @@ typedef struct {
   byte   velocityProgram[OUTPUT_PINS_COUNT];
   int8_t min_milli[OUTPUT_PINS_COUNT];
   int8_t max_milli[OUTPUT_PINS_COUNT];
+  int8_t curve_power[OUTPUT_PINS_COUNT];
 } velocityCFG;
 
 typedef struct {
@@ -378,7 +379,8 @@ void handleMinConfig(byte pin, int val) {
     if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
       programData.velocityConfig.max_milli[pin] = programData.velocityConfig.min_milli[pin];
     }
-    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin]);
+    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin],
+                       programData.velocityConfig.curve_power[pin]);
     statusLED.blink(1, 2, 1);
   }
 }
@@ -389,7 +391,8 @@ void handleMaxConfig(byte pin, int val) {
     if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
       programData.velocityConfig.min_milli[pin] = programData.velocityConfig.max_milli[pin];
     }
-    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin]);
+    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin],
+                       programData.velocityConfig.curve_power[pin]);
     statusLED.blink(1, 2, 1);
   }
 }
@@ -487,11 +490,12 @@ void initMaxMinMap() {
    for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
      int min_range = programData.velocityConfig.min_milli[pin];
      int max_range = programData.velocityConfig.max_milli[pin];
-     initMaxMinMap(pin, min_range, max_range);
+     int power = programData.velocityConfig.curve_power[pin];
+     initMaxMinMap(pin, min_range, max_range, power);
    }
 }
 
-void initMaxMinMap(int pin, int min_range, int max_range) 
+void initMaxMinMap(int pin, int min_range, int max_range, int power) 
 {
    if (max_range == MAX_MIN_INFINITE) {
      for (int i = 0; i < 127; i++) {
@@ -503,12 +507,20 @@ void initMaxMinMap(int pin, int min_range, int max_range)
    int range = ((1000 - 127) * (float)(max_range - min_range) / 127.f) + 0.5f;
    int base_val = ((1000 - 127) * min_range / 127.f) + 0.5f;
    
+   float fraction, y;
+   
    for (int i = 0; i < 127; i++) {
       // Map the input range of 0..127 to a value between 0..1.
-      float fraction = (float)i / 127.f;
-      
-      // Map 0..1 to 0..1, but let it grow exponentially.
-      float y = pow(fraction, 3);
+
+      if (power < 0) {
+        fraction = (127 - i) / 127.0;
+        y = 1 - pow(fraction, -power);        
+      } else {
+        fraction = (float)i / 127.f;
+        
+        // Map 0..1 to 0..1, but let it grow exponentially.
+        y = pow(fraction, power);
+      }
       
       // Convert to a value between 0..1000. We add the base
       // value to assure that we produce growing values; otherwise

@@ -288,6 +288,10 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
     {
       veloP->min_milli[i] = MAX_MIN_INFINITE;
       veloP->max_milli[i] = MAX_MIN_INFINITE;
+      veloP->curve_power[i] = 3;
+    }
+    if(veloP->curve_power[i] != 3 && veloP->curve_power[i] != -2) {
+      veloP->curve_power[i] = 3;
     }
   }
 }
@@ -406,6 +410,10 @@ bool dadaSysEx::hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
       {
         return true;
       }
+      if(config1->curve_power[i] != config2->curve_power[i])
+      {
+        return true;
+      }
     }
 
     return false;
@@ -418,6 +426,7 @@ inline void dadaSysEx::copyConfig(velocityCFG* src, velocityCFG* dest)
       dest->velocityProgram[i] = src->velocityProgram[i];
       dest->min_milli[i] = src->min_milli[i];
       dest->max_milli[i] = src->max_milli[i];
+      dest->curve_power[i] = src->curve_power[i];
     }
 }
 
