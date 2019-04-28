@@ -290,7 +290,7 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
       veloP->max_milli[i] = MAX_MIN_INFINITE;
       veloP->curve_power[i] = 3;
     }
-    if(veloP->curve_power[i] != 3 && veloP->curve_power[i] != -2) {
+    if(veloP->curve_power[i] != 3 && veloP->curve_power[i] != 0x12) {
       veloP->curve_power[i] = 3;
     }
   }
