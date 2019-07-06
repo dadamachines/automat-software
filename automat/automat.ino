@@ -507,8 +507,8 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
      return;
    }
   
-   int range = ((1000 - 127) * (float)(max_range - min_range) / 127.f) + 0.5f;
-   int base_val = ((1000 - 127) * min_range / 127.f) + 0.5f;
+   int range = ((1016) * (float)(max_range - min_range) / 127.f) + 0.5f;
+   int base_val = min_range * 8;
    
    float fraction, y;
    
@@ -529,7 +529,7 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
       // value to assure that we produce growing values; otherwise
       // the first numbers in the sequence would be rounded to the
       // same values.
-      int v = i + (y * range) + base_val;
+      int v = (y * range) + base_val;
       
       // Round 500..1000 in 10 steps increment. 
       if (v >= 500) {
