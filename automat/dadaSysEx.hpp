@@ -37,8 +37,8 @@
 
 extern void mapFixedDurationConfig();
 extern void initMaxMinMap();
-extern void handleMinConfig(byte pin, int val);
-extern void handleMaxConfig(byte pin, int val);
+extern void handleMinConfig(byte pin, int val, int power);
+extern void handleMaxConfig(byte pin, int val, int power);
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 
@@ -76,13 +76,15 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
          arr += sizeof(int);
          int pin = *arr++;
          int value = *arr++;
-         handleMinConfig(pin, value);        
+         int power = *arr++;
+         handleMinConfig(pin, value, power);        
          return true;
        } else if (getIntFromArray(arr) == SYSEX_MAX_SET_HEADER) {
          arr += sizeof(int);
          int pin = *arr++;
          int value = *arr++;
-         handleMaxConfig(pin, value);        
+         int power = *arr++;
+         handleMaxConfig(pin, value, power);        
          return true;
        }
        return false;

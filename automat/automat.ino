@@ -48,7 +48,7 @@ FlashStorage(programStore, programCFG);
 unsigned long milli_stop[OUTPUT_PINS_COUNT];               // time at which to stop note for program 0
 int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
 int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
-byte max_min_map[OUTPUT_PINS_COUNT][128];
+int32_t max_min_map[OUTPUT_PINS_COUNT][128];
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -373,9 +373,10 @@ void handleAllNotesOff() {
 #endif
 }
 
-void handleMinConfig(byte pin, int val) {
+void handleMinConfig(byte pin, int val, int power) {
   if (pin < OUTPUT_PINS_COUNT && programData.velocityConfig.velocityProgram[pin] == MAX_MIN_PROGRAM) {
-    programData.velocityConfig.min_milli[pin] = val;          
+    programData.velocityConfig.min_milli[pin] = val;        
+    programData.velocityConfig.curve_power[pin] = power;  
     if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
       programData.velocityConfig.max_milli[pin] = programData.velocityConfig.min_milli[pin];
     }
@@ -385,9 +386,10 @@ void handleMinConfig(byte pin, int val) {
   }
 }
 
-void handleMaxConfig(byte pin, int val) {
+void handleMaxConfig(byte pin, int val, int power) {
   if (pin < OUTPUT_PINS_COUNT && (programData.velocityConfig.velocityProgram[pin] == MAX_MIN_PROGRAM)) {
-    programData.velocityConfig.max_milli[pin] = val;          
+    programData.velocityConfig.max_milli[pin] = val; 
+    programData.velocityConfig.curve_power[pin] = power;             
     if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
       programData.velocityConfig.min_milli[pin] = programData.velocityConfig.max_milli[pin];
     }
@@ -497,7 +499,7 @@ void initMaxMinMap() {
 
 void initMaxMinMap(int pin, int min_range, int max_range, int power) 
 {
-   if (power & 0x10 != 0) {
+   if ((power & 0x10) != 0) {
      power = (power & 0x0F) * -1;
    }
    if (max_range == MAX_MIN_INFINITE) {
@@ -505,6 +507,10 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
         max_min_map[pin][i] = ULONG_MAX;
      }    
      return;
+   }
+
+   if (min_range < 1) {
+    min_range = 1;
    }
   
    int range = ((1016) * (float)(max_range - min_range) / 127.f) + 0.5f;
@@ -516,10 +522,10 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
       // Map the input range of 0..127 to a value between 0..1.
 
       if (power < 0) {
-        fraction = (127 - i) / 127.0;
+        fraction = ((float)(127 - i)) / 127.0;
         y = 1 - pow(fraction, -power);        
       } else {
-        fraction = (float)i / 127.f;
+        fraction = ((float)i) / 127.f;
         
         // Map 0..1 to 0..1, but let it grow exponentially.
         y = pow(fraction, power);
