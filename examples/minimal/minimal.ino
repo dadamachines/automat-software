@@ -8,6 +8,8 @@
 #include <SPI.h>
 
 // constants
+const int MIDI_NOTE_OFFSET = 36;                        // midi note offset. e.g. 36 for C1 in ableton
+
 const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
 const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
 const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic
@@ -63,7 +65,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
   statusLED.blink(1, 2, 1);
   
   for (int i = 0 ; i < 12 ; i++) {
-    if (note == i) {
+    if (note == ( i + MIDI_NOTE_OFFSET)) {
       solenoids.setOutput(i);
     }
   }
@@ -73,7 +75,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   statusLED.blink(1, 2, 1);
   
   for (int i = 0 ; i < 12 ; i++) {
-    if (note == i) {
+    if (note == ( i + MIDI_NOTE_OFFSET )) {
       solenoids.clearOutput(i);
     }
   }
