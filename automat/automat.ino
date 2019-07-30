@@ -27,8 +27,8 @@ dataCFG nvData;
 
 typedef struct {
   byte   velocityProgram[OUTPUT_PINS_COUNT];
-  int8_t min_milli[OUTPUT_PINS_COUNT];
-  int8_t max_milli[OUTPUT_PINS_COUNT];
+  uint16_t min_milli[OUTPUT_PINS_COUNT];
+  uint16_t max_milli[OUTPUT_PINS_COUNT];
   int8_t curve_power[OUTPUT_PINS_COUNT];
 } velocityCFG;
 
@@ -513,8 +513,8 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
     min_range = 1;
    }
   
-   int range = ((1016) * (float)(max_range - min_range) / 127.f) + 0.5f;
-   int base_val = min_range * 8;
+   int range = ((float)(max_range - min_range)) + 0.5f;
+   int base_val = min_range;
    
    float fraction, y;
    
@@ -522,10 +522,10 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
       // Map the input range of 0..127 to a value between 0..1.
 
       if (power < 0) {
-        fraction = ((float)(127 - i)) / 127.0;
+        fraction = ((float)(126 - i)) / 125.0;
         y = 1 - pow(fraction, -power);        
       } else {
-        fraction = ((float)i) / 127.f;
+        fraction = ((float)i) / 126.f;
         
         // Map 0..1 to 0..1, but let it grow exponentially.
         y = pow(fraction, power);
@@ -537,14 +537,14 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
       // same values.
       int v = (y * range) + base_val;
       
-      // Round 500..1000 in 10 steps increment. 
+/*      // Round 500..1000 in 10 steps increment. 
       if (v >= 500) {
         v -= v % 10;
       // Round 150..499 in 5 steps increment. 
       }
       else if (v >= 150) {
         v -= v % 5;
-      }
+      } */
 
       max_min_map[pin][i] = v;
    }    

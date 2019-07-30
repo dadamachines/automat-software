@@ -57,7 +57,7 @@ class dadaSysEx {
     static const int SYSEX_MIN_CONFIG_LEN = 3 + (sizeof (int) * 4) + sizeof(dataCFG) + sizeof(velocityCFG) ;
     static const int SYSEX_CONFIG_LEN = 3 + (sizeof (int) * 5) + sizeof(dataCFG) + sizeof(velocityCFG) + sizeof(gateCFG);
     static const int SYSEX_GET_CONFIG_LEN = 3 + (sizeof (int) * 2);
-    static const int SYSEX_SET_MIN_MAX_LEN = 3 + 5 + 2;
+    static const int SYSEX_SET_MIN_MAX_LEN = 3 + 6 + 2;
     static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 3);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
   
@@ -99,8 +99,11 @@ protected:
 
   inline static void sanitizeForSysex(dataCFG* dataP);
   inline static void sanitizeForSysex(velocityCFG* veloP);
+
   inline static void encodeForSysex(gateCFG* gateP);
+  inline static void encodeForSysex(velocityCFG* veloP);
   inline static void decodeForSysex(gateCFG* gateP);
+  inline static void decodeForSysex(velocityCFG* veloP);
   
   inline static bool hasConfigChanged(dataCFG* config1, dataCFG* config2);
   inline static bool hasConfigChanged(velocityCFG* config1, velocityCFG* config2);

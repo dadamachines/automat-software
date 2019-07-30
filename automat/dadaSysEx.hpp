@@ -41,6 +41,7 @@ extern void handleMinConfig(byte pin, int val, int power);
 extern void handleMaxConfig(byte pin, int val, int power);
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
+programCFG storedDataForCompare;
 
 bool dadaSysEx::safeToRead(byte * now, const byte* before, unsigned bufferLen, unsigned readLen) {
   return (now - before) <= bufferLen - readLen; 
@@ -76,6 +77,8 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
          arr += sizeof(int);
          int pin = *arr++;
          int value = *arr++;
+         value <<= 7;
+         value += *arr++;
          int power = *arr++;
          handleMinConfig(pin, value, power);        
          return true;
@@ -83,6 +86,8 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
          arr += sizeof(int);
          int pin = *arr++;
          int value = *arr++;
+         value <<= 7;
+         value += *arr++;
          int power = *arr++;
          handleMaxConfig(pin, value, power);        
          return true;
@@ -140,9 +145,12 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    }
    arr += sizeof(int);
 
+   
+   storedDataForCompare = programStore.read();
    velocityCFG* veloP = (velocityCFG*) arr;
    bool programChanged = false;
-   if (hasConfigChanged(&(cfgProgram->velocityConfig), veloP))
+   decodeForSysex(veloP);
+   if (hasConfigChanged(&(storedDataForCompare.velocityConfig), veloP))
    {
       // avoid writing to Flash unless there is a need
       copyConfig(veloP, &(cfgProgram->velocityConfig));
@@ -158,7 +166,7 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
   
      gateCFG* gateP = (gateCFG*) arr;
      decodeForSysex(gateP);
-     if (hasConfigChanged(&(cfgProgram->gateConfig), gateP))
+     if (hasConfigChanged(&(storedDataForCompare.gateConfig), gateP))
      {
         // avoid writing to Flash unless there is a need
         copyConfig(gateP, &(cfgProgram->gateConfig));
@@ -172,8 +180,8 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 
    if (programChanged) 
    {
-      initMaxMinMap();
       programStore.write(*cfgProgram);
+      initMaxMinMap();
    }
    
    return true;
@@ -222,6 +230,8 @@ bool dadaSysEx::handleSysExUSBPacket(midiEventPacket_t rx)
 
 void dadaSysEx::saveConfigToSysEx()
 {
+   *cfgProgram = programStore.read();
+  
    byte* outP = &sysexOutArr[0];
 
    *outP++ = SYSEX_START;
@@ -254,6 +264,7 @@ void dadaSysEx::saveConfigToSysEx()
    velocityCFG* veloP = (velocityCFG*) outP;
    copyConfig(&(cfgProgram->velocityConfig), veloP);
    sanitizeForSysex(veloP);
+   encodeForSysex(veloP);
    outP += sizeof(velocityCFG);
 
    outP = putIntToArray(outP, SYSEX_CONFIG_GATE);
@@ -280,10 +291,10 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
     {
       veloP->velocityProgram[i] = MAX_MIN_PROGRAM;
     }
-    if( veloP->min_milli[i] > 127) {
+    if( veloP->min_milli[i] > 1008) {
       veloP->min_milli[i] = MAX_MIN_INFINITE;
     }
-    if( veloP->max_milli[i] > 127) {
+    if( veloP->max_milli[i] > 1008) {
       veloP->max_milli[i] = MAX_MIN_INFINITE;
     }
     if(veloP->max_milli[i] < 1 || veloP->min_milli[i] > veloP->max_milli[i])
@@ -430,6 +441,33 @@ inline void dadaSysEx::copyConfig(velocityCFG* src, velocityCFG* dest)
       dest->max_milli[i] = src->max_milli[i];
       dest->curve_power[i] = src->curve_power[i];
     }
+}
+
+
+void dadaSysEx::encodeForSysex(velocityCFG* veloP) {
+    for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+    {
+      int lowerPart = veloP->min_milli[i] & 0x007F;
+      int upperPart = veloP->min_milli[i] & 0x3F80;
+      veloP->min_milli[i] = lowerPart | (upperPart << 1);
+  
+      lowerPart = veloP->max_milli[i] & 0x007F;
+      upperPart = veloP->max_milli[i] & 0x3F80;
+      veloP->max_milli[i] = lowerPart | (upperPart << 1);
+    }
+}
+
+void dadaSysEx::decodeForSysex(velocityCFG* veloP) {
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    int lowerPart = veloP->min_milli[i] & 0x007F;
+    int upperPart = veloP->min_milli[i] & 0x7F00;
+    veloP->min_milli[i] = lowerPart | (upperPart >> 1);
+    
+    lowerPart = veloP->max_milli[i] & 0x007F;
+    upperPart = veloP->max_milli[i] & 0x7F00;
+    veloP->max_milli[i] = lowerPart | (upperPart >> 1);
+  }
 }
 
 bool dadaSysEx::hasConfigChanged(gateCFG* config1, gateCFG* config2)
