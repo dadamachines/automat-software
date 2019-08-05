@@ -291,10 +291,10 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
     {
       veloP->velocityProgram[i] = MAX_MIN_PROGRAM;
     }
-    if( veloP->min_milli[i] > 1008) {
+    if( veloP->min_milli[i] > 1016) {
       veloP->min_milli[i] = MAX_MIN_INFINITE;
     }
-    if( veloP->max_milli[i] > 1008) {
+    if( veloP->max_milli[i] > 1016) {
       veloP->max_milli[i] = MAX_MIN_INFINITE;
     }
     if(veloP->max_milli[i] < 1 || veloP->min_milli[i] > veloP->max_milli[i])

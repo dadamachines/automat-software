@@ -221,13 +221,13 @@ void loop() {
 void handleProgramChange(byte channel, byte patch) {
 
   if (patch > MAX_PROGRAM || patch < MIN_PROGRAM) {
-      patch = ALWAYS_ON_PROGRAM;
+      patch = MIN_PROGRAM;
   }
 
   bool configChanged = false;
 
   for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
-    if ((nvData.midiChannels[pin] == channel) || (nvData.midiChannels[pin] == MIDI_CHANNEL_OMNI)) {     
+    if (nvData.midiChannels[pin] == channel) {     
       if (programData.velocityConfig.velocityProgram[pin] != patch) {
         programData.velocityConfig.velocityProgram[pin] = patch;
         configChanged = true;
@@ -252,7 +252,7 @@ void handleNoteOn(byte pin, byte velocity) {
         case MAX_MIN_PROGRAM:
         {
           int8_t max_milli = programData.velocityConfig.max_milli[pin];
-          if (max_milli == MAX_MIN_INFINITE || velocity == 127) {
+          if (max_milli == MAX_MIN_INFINITE) {
             milli_stop[pin] = ULONG_MAX;
           } else {
             milli_stop[pin] = millis() + max_min_map[pin][velocity];
@@ -518,14 +518,14 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
    
    float fraction, y;
    
-   for (int i = 0; i < 127; i++) {
+   for (int i = 0; i < 128; i++) {
       // Map the input range of 0..127 to a value between 0..1.
 
       if (power < 0) {
-        fraction = ((float)(126 - i)) / 125.0;
+        fraction = ((float)(127 - i)) / 126.0;
         y = 1 - pow(fraction, -power);        
       } else {
-        fraction = ((float)i) / 126.f;
+        fraction = ((float)i) / 127.f;
         
         // Map 0..1 to 0..1, but let it grow exponentially.
         y = pow(fraction, power);
@@ -548,6 +548,5 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
 
       max_min_map[pin][i] = v;
    }    
-   max_min_map[pin][127] = ULONG_MAX;
 }
 
