@@ -503,7 +503,7 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
      power = (power & 0x0F) * -1;
    }
    if (max_range == MAX_MIN_INFINITE) {
-     for (int i = 0; i < 127; i++) {
+     for (int i = 0; i < 128; i++) {
         max_min_map[pin][i] = ULONG_MAX;
      }    
      return;
