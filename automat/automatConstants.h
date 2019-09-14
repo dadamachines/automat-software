@@ -36,7 +36,7 @@
 
 #define AUTOMAT_MINI 0
 
-const int SYSEX_FIRMWARE_VERSION = 0x01000801;          // = version 1.8.1
+const int SYSEX_FIRMWARE_VERSION = 0x02000000;          // = version 2.0.0
 
 #if AUTOMAT_MINI
 const int OUTPUT_PINS_COUNT = 6;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
