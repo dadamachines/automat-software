@@ -6,28 +6,11 @@
 #include <SPI.h>
 #include <OneButton.h>
 #include <Wire.h>
+#include <Limits.h>
+
+#include "automatConstants.h"
 
 // constants
-const int SYSEX_FIRMWARE_VERSION = 0x01000403;          // = version 1.4.3
-
-const int OUTPUT_PINS_COUNT = 12;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
-const int LEARN_MODE_PIN = 38;                          // pin for the learn mode switch
-const int SHIFT_REGISTER_ENABLE = 27;                   // Output enable for shiftregister ic
-const int ACTIVITY_LED = 13;                            // activity led is still on D13 which is connected to PA17 > which means Pin 9 on MKRZero
-
-const int ALWAYS_ON_PROGRAM = 0;                        // The index of the default always on program
-const int QUADRATIC_PROGRAM = 1;                        // The index of the quadratic one pulse program
-const int INVERSE_QUADRATIC_PROGRAM = 2;                // The index of the inverse quadratic one pulse program
-/* programs 3 to 5 are reserved by the PWMManager */
-const int FIXED_GATE_PROGRAM = 6;                       // The index of the one-pulse program with a configured gate duration
-const int MIN_PROGRAM = 0;                              // The index of the minimum valid program
-const int MAX_PROGRAM = 6;                              // The index of the maximum valid program
-
-enum {
-  MIDI_CC_MOD_WHEEL = 1,
-  MIDI_CC_ALL_NOTES_OFF = 123
-};
-
 // i2c constants
 // TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
 // so we can mimic its teletype API. Future address will be 0xDA.
@@ -38,13 +21,15 @@ const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/N
 // NV Data
 typedef struct {
   byte   midiChannels[OUTPUT_PINS_COUNT];                 // 1-16 or 0 for any
-  byte   midiPins[OUTPUT_PINS_COUNT];                     // midi notes
-  byte   alignfiller[8];                                  // for eeprom support   (Justin: I don't think this is needed. 32-bit alignment should be enough)
+  byte   midiNotes[OUTPUT_PINS_COUNT];                     // midi notes
 } dataCFG;
 dataCFG nvData;
 
 typedef struct {
   byte   velocityProgram[OUTPUT_PINS_COUNT];
+  uint16_t min_milli[OUTPUT_PINS_COUNT];
+  uint16_t max_milli[OUTPUT_PINS_COUNT];
+  int8_t curve_power[OUTPUT_PINS_COUNT];
 } velocityCFG;
 
 typedef struct {
@@ -60,15 +45,10 @@ programCFG programData;
 FlashStorage(nvStore, dataCFG);
 FlashStorage(programStore, programCFG);
 
-const int MAX_MIDI_CHANNEL = 16;
-
+unsigned long milli_stop[OUTPUT_PINS_COUNT];               // time at which to stop note for program 0
 int loop_countdown[OUTPUT_PINS_COUNT];                    // This is the total number of loops left where we will execute a PWM
-const int NO_COUNTDOWN = 14401;                           // A special value to indicate that we are not using a PWM countdown
-const int COUNTDOWN_START = 14400;                        // Maximum number of loops where we apply the PWM
-const float LOOP_TIME_FACTOR = 64.0f;                     // The number of loops ms per ms according to my cheap oscilliscope
-
 int gateDuration[OUTPUT_PINS_COUNT];                      // This is the total number of loops configured for this one-shot trigger
-
+int32_t max_min_map[OUTPUT_PINS_COUNT][128];
 
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);                             // PB22 Pin in new layout is Pin14 on MKRZero
@@ -120,6 +100,7 @@ void setup() {
   // if uninitialized, this value should be read as -1
   sysex.sanitizeVelocityConfig(&(programData.velocityConfig));  
   mapFixedDurationConfig();
+  initMaxMinMap();
 
   statusLED.blink(20, 30, 32);
 }
@@ -128,6 +109,8 @@ void loop() {
   midi2.read();
   button.tick();
   statusLED.tick();
+  unsigned long now = 0;
+  
 
   // handle blinking port on learning in advanced mode
   if(midiLearn.active) {
@@ -141,6 +124,15 @@ void loop() {
 
     switch (velocity_program)
     {
+      case MAX_MIN_PROGRAM:
+        if (now == 0) {
+          now = millis();
+        }
+        if(milli_stop[i] > 0 && milli_stop[i] < now) {
+          solenoids.clearOutput(i);
+          milli_stop[i] = 0;
+        }
+        break;
       case FIXED_GATE_PROGRAM:
       case QUADRATIC_PROGRAM:
       case INVERSE_QUADRATIC_PROGRAM:
@@ -154,7 +146,7 @@ void loop() {
           }
           if(loop_countdown[i] > 0) {
             solenoids.clearOutput(i);
-            loop_countdown[i]=0;
+            loop_countdown[i] = 0;
           }
         }
         break;
@@ -229,13 +221,13 @@ void loop() {
 void handleProgramChange(byte channel, byte patch) {
 
   if (patch > MAX_PROGRAM || patch < MIN_PROGRAM) {
-      patch = ALWAYS_ON_PROGRAM;
+      patch = MIN_PROGRAM;
   }
 
   bool configChanged = false;
 
   for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
-    if ((nvData.midiChannels[pin] == channel) || (nvData.midiChannels[pin] == MIDI_CHANNEL_OMNI)) {     
+    if (nvData.midiChannels[pin] == channel) {     
       if (programData.velocityConfig.velocityProgram[pin] != patch) {
         programData.velocityConfig.velocityProgram[pin] = patch;
         configChanged = true;
@@ -257,6 +249,16 @@ void handleNoteOn(byte pin, byte velocity) {
 
     switch (velocity_program) 
     {
+        case MAX_MIN_PROGRAM:
+        {
+          int8_t max_milli = programData.velocityConfig.max_milli[pin];
+          if (max_milli == MAX_MIN_INFINITE) {
+            milli_stop[pin] = ULONG_MAX;
+          } else {
+            milli_stop[pin] = millis() + max_min_map[pin][velocity];
+          }
+          break;
+        }
         case FIXED_GATE_PROGRAM:
           loop_countdown[pin] = gateDuration[pin]; // set velocity timer
           break;
@@ -297,7 +299,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
   statusLED.blink(1, 2, 1);
 
   for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
-    if (nvData.midiPins[i] == note) {
+    if (nvData.midiNotes[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
@@ -313,6 +315,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
   loop_countdown[pin] = 0;
+  milli_stop[pin] = 0;
 #if PWM_SUPPORT
   PWMManager::handleNoteOff(pin);
 #endif
@@ -328,7 +331,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   statusLED.blink(1, 2, 1);
   
   for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
-    if (nvData.midiPins[i] == note) {
+    if (nvData.midiNotes[i] == note) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
@@ -344,10 +347,13 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
 }
 
 void handleControlChange(byte channel, byte number, byte value) {
-  if (number == MIDI_CC_MOD_WHEEL) {
-    handleModWheel(channel, value);
-  } else if (number == MIDI_CC_ALL_NOTES_OFF) {
-    handleAllNotesOff();
+  switch (number) {
+    case MIDI_CC_MOD_WHEEL:
+      handleModWheel(channel, value);
+      break;
+    case MIDI_CC_ALL_NOTES_OFF:
+      handleAllNotesOff();
+      break;
   }
 }
 
@@ -367,6 +373,31 @@ void handleAllNotesOff() {
 #endif
 }
 
+void handleMinConfig(byte pin, int val, int power) {
+  if (pin < OUTPUT_PINS_COUNT && programData.velocityConfig.velocityProgram[pin] == MAX_MIN_PROGRAM) {
+    programData.velocityConfig.min_milli[pin] = val;        
+    programData.velocityConfig.curve_power[pin] = power;  
+    if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
+      programData.velocityConfig.max_milli[pin] = programData.velocityConfig.min_milli[pin];
+    }
+    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin],
+                       programData.velocityConfig.curve_power[pin]);
+    statusLED.blink(1, 2, 1);
+  }
+}
+
+void handleMaxConfig(byte pin, int val, int power) {
+  if (pin < OUTPUT_PINS_COUNT && (programData.velocityConfig.velocityProgram[pin] == MAX_MIN_PROGRAM)) {
+    programData.velocityConfig.max_milli[pin] = val; 
+    programData.velocityConfig.curve_power[pin] = power;             
+    if (programData.velocityConfig.max_milli[pin] < programData.velocityConfig.min_milli[pin]) {
+      programData.velocityConfig.min_milli[pin] = programData.velocityConfig.max_milli[pin];
+    }
+    initMaxMinMap(pin, programData.velocityConfig.min_milli[pin], programData.velocityConfig.max_milli[pin],
+                       programData.velocityConfig.curve_power[pin]);
+    statusLED.blink(1, 2, 1);
+  }
+}
 
 void handlePitchBend(byte channel, int bend) {
 #if PWM_SUPPORT
@@ -455,5 +486,67 @@ void mapFixedDurationConfig() {
         gateDuration[i] = 0;
       }
   }
+}
+
+void initMaxMinMap() {
+   for (int pin = 0; pin < OUTPUT_PINS_COUNT; ++pin) {
+     int min_range = programData.velocityConfig.min_milli[pin];
+     int max_range = programData.velocityConfig.max_milli[pin];
+     int power = programData.velocityConfig.curve_power[pin];
+     initMaxMinMap(pin, min_range, max_range, power);
+   }
+}
+
+void initMaxMinMap(int pin, int min_range, int max_range, int power) 
+{
+   if ((power & 0x10) != 0) {
+     power = (power & 0x0F) * -1;
+   }
+   if (max_range == MAX_MIN_INFINITE) {
+     for (int i = 0; i < 128; i++) {
+        max_min_map[pin][i] = ULONG_MAX;
+     }    
+     return;
+   }
+
+   if (min_range < 1) {
+    min_range = 1;
+   }
+  
+   int range = ((float)(max_range - min_range)) + 0.5f;
+   int base_val = min_range;
+   
+   float fraction, y;
+   
+   for (int i = 0; i < 128; i++) {
+      // Map the input range of 0..127 to a value between 0..1.
+
+      if (power < 0) {
+        fraction = ((float)(127 - i)) / 126.0;
+        y = 1 - pow(fraction, -power);        
+      } else {
+        fraction = ((float)i) / 127.f;
+        
+        // Map 0..1 to 0..1, but let it grow exponentially.
+        y = pow(fraction, power);
+      }
+      
+      // Convert to a value between 0..1000. We add the base
+      // value to assure that we produce growing values; otherwise
+      // the first numbers in the sequence would be rounded to the
+      // same values.
+      int v = (y * range) + base_val;
+      
+/*      // Round 500..1000 in 10 steps increment. 
+      if (v >= 500) {
+        v -= v % 10;
+      // Round 150..499 in 5 steps increment. 
+      }
+      else if (v >= 150) {
+        v -= v % 5;
+      } */
+
+      max_min_map[pin][i] = v;
+   }    
 }
 

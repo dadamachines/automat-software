@@ -36,22 +36,34 @@
 #pragma once
 
 extern void mapFixedDurationConfig();
+extern void initMaxMinMap();
+extern void handleMinConfig(byte pin, int val, int power);
+extern void handleMaxConfig(byte pin, int val, int power);
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
+programCFG storedDataForCompare;
+
+bool dadaSysEx::safeToRead(byte * now, const byte* before, unsigned bufferLen, unsigned readLen) {
+  return (now - before) <= bufferLen - readLen; 
+}
 
 bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 {
+   const byte* startFrame = arr;
    if(len > 1 && (*arr == SYSEX_START))
    {
       arr++;
       // ignore the sysex framing
    }
   
-   if (len < SYSEX_CONFIG_LEN)
+   if (len < SYSEX_MIN_CONFIG_LEN)
    {
       if (len != SYSEX_GET_CONFIG_LEN)
       {
-         return false;
+         if (len != SYSEX_SET_MIN_MAX_LEN)
+         {
+             return false;
+         }
       }
    }
 
@@ -61,6 +73,25 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 
    if (getIntFromArray(arr) != SYSEX_CONFIG_HEADER)
    {
+       if (getIntFromArray(arr) == SYSEX_MIN_SET_HEADER) {
+         arr += sizeof(int);
+         int pin = *arr++;
+         int value = *arr++;
+         value <<= 7;
+         value += *arr++;
+         int power = *arr++;
+         handleMinConfig(pin, value, power);        
+         return true;
+       } else if (getIntFromArray(arr) == SYSEX_MAX_SET_HEADER) {
+         arr += sizeof(int);
+         int pin = *arr++;
+         int value = *arr++;
+         value <<= 7;
+         value += *arr++;
+         int power = *arr++;
+         handleMaxConfig(pin, value, power);        
+         return true;
+       }
        return false;
    }
    arr += sizeof(int);
@@ -90,6 +121,14 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    }
    arr += sizeof(int);
 
+   const int numPins = getIntFromArray(arr) & 0x0FF;
+   if (numPins != OUTPUT_PINS_COUNT)
+   {
+       return false;
+   }
+   arr += sizeof(int);
+
+
    dataCFG* dataP = (dataCFG*) arr;
 
    if (hasConfigChanged(cfgData, dataP))
@@ -106,9 +145,12 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    }
    arr += sizeof(int);
 
+   
+   storedDataForCompare = programStore.read();
    velocityCFG* veloP = (velocityCFG*) arr;
    bool programChanged = false;
-   if (hasConfigChanged(&(cfgProgram->velocityConfig), veloP))
+   decodeForSysex(veloP);
+   if (hasConfigChanged(&(storedDataForCompare.velocityConfig), veloP))
    {
       // avoid writing to Flash unless there is a need
       copyConfig(veloP, &(cfgProgram->velocityConfig));
@@ -117,28 +159,29 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
 
    arr += sizeof(velocityCFG);
 
-   if (getIntFromArray(arr) != SYSEX_CONFIG_GATE)
+   if (safeToRead(arr, startFrame, len, sizeof(gateCFG) + sizeof(int)) && getIntFromArray(arr) == SYSEX_CONFIG_GATE)
    {
-       return false;
+     // gate is an optional config section
+     arr += sizeof(int);
+  
+     gateCFG* gateP = (gateCFG*) arr;
+     decodeForSysex(gateP);
+     if (hasConfigChanged(&(storedDataForCompare.gateConfig), gateP))
+     {
+        // avoid writing to Flash unless there is a need
+        copyConfig(gateP, &(cfgProgram->gateConfig));
+        programChanged = true;
+        mapFixedDurationConfig();
+     }
+  
+     // I know this line is not really needed, but I don't want it forgotten when we extend this method
+     arr += sizeof(gateCFG);
    }
-   arr += sizeof(int);
-
-   gateCFG* gateP = (gateCFG*) arr;
-   decodeForSysex(gateP);
-   if (hasConfigChanged(&(cfgProgram->gateConfig), gateP))
-   {
-      // avoid writing to Flash unless there is a need
-      copyConfig(gateP, &(cfgProgram->gateConfig));
-      programChanged = true;
-      mapFixedDurationConfig();
-   }
-
-   // I know this line is not really needed, but I don't want it forgotten when we extend this method
-   arr += sizeof(gateCFG);
 
    if (programChanged) 
    {
       programStore.write(*cfgProgram);
+      initMaxMinMap();
    }
    
    return true;
@@ -187,6 +230,8 @@ bool dadaSysEx::handleSysExUSBPacket(midiEventPacket_t rx)
 
 void dadaSysEx::saveConfigToSysEx()
 {
+   *cfgProgram = programStore.read();
+  
    byte* outP = &sysexOutArr[0];
 
    *outP++ = SYSEX_START;
@@ -196,6 +241,18 @@ void dadaSysEx::saveConfigToSysEx()
    outP = putIntToArray(outP, SYSEX_CONFIG_HEADER);
 
    outP = putIntToArray(outP, SYSEX_CONFIG_PINS);
+
+   *outP++ = 0;
+
+#if PWM_SUPPORT
+   *outP++ = 1;
+#else
+   *outP++ = 0;
+#endif
+
+   *outP++ = 0;
+
+   *outP++ = OUTPUT_PINS_COUNT;
 
    dataCFG* dataP = (dataCFG*) outP;
    copyConfig(cfgData, dataP);
@@ -207,6 +264,7 @@ void dadaSysEx::saveConfigToSysEx()
    velocityCFG* veloP = (velocityCFG*) outP;
    copyConfig(&(cfgProgram->velocityConfig), veloP);
    sanitizeForSysex(veloP);
+   encodeForSysex(veloP);
    outP += sizeof(velocityCFG);
 
    outP = putIntToArray(outP, SYSEX_CONFIG_GATE);
@@ -231,7 +289,22 @@ void dadaSysEx::sanitizeForSysex(velocityCFG* veloP)
   {
     if(veloP->velocityProgram[i] < MIN_PROGRAM || veloP->velocityProgram[i] > MAX_PROGRAM)
     {
-      veloP->velocityProgram[i] = ALWAYS_ON_PROGRAM;
+      veloP->velocityProgram[i] = MAX_MIN_PROGRAM;
+    }
+    if( veloP->min_milli[i] > 1016) {
+      veloP->min_milli[i] = MAX_MIN_INFINITE;
+    }
+    if( veloP->max_milli[i] > 1016) {
+      veloP->max_milli[i] = MAX_MIN_INFINITE;
+    }
+    if(veloP->max_milli[i] < 1 || veloP->min_milli[i] > veloP->max_milli[i])
+    {
+      veloP->min_milli[i] = MAX_MIN_INFINITE;
+      veloP->max_milli[i] = MAX_MIN_INFINITE;
+      veloP->curve_power[i] = 3;
+    }
+    if(veloP->curve_power[i] != 3 && veloP->curve_power[i] != 0x12) {
+      veloP->curve_power[i] = 3;
     }
   }
 }
@@ -276,6 +349,12 @@ void dadaSysEx::sendVersionToSysEx()
 
    outP = putIntToArray(outP, SYSEX_FIRMWARE_VERSION);
 
+#if PWM_SUPPORT
+   outP = putIntToArray(outP, 0x010000 | OUTPUT_PINS_COUNT);
+#else 
+   outP = putIntToArray(outP, OUTPUT_PINS_COUNT);
+#endif
+
    *outP = SYSEX_END;
 
    // the midi2.send function probably doesn't do anything with the current hardware, but I'm leaving it in for completeness
@@ -287,12 +366,7 @@ void dadaSysEx::sendVersionToSysEx()
 
 void dadaSysEx::sanitizeForSysex(dataCFG* dataP)
 {
-     // we need to avoid any values > 127 for sysex
-     for (int j = 0; j < 8; ++j)
-     {
-       dataP->alignfiller[j] = 0;
-     }
-     
+     // we need to avoid any values > 127 for sysex     
      for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
      {
        if(dataP->midiChannels[i] < 0 || dataP->midiChannels[i] > 127)
@@ -300,9 +374,9 @@ void dadaSysEx::sanitizeForSysex(dataCFG* dataP)
          dataP->midiChannels[i] = MIDI_CHANNEL_OMNI;
        }
        
-       if(dataP->midiPins[i] < 0 || dataP->midiPins[i] > 127)
+       if(dataP->midiNotes[i] < 0 || dataP->midiNotes[i] > 127)
        {
-         dataP->midiPins[i] = 0;
+         dataP->midiNotes[i] = 0;
        }
      }
 }
@@ -315,7 +389,7 @@ bool dadaSysEx::hasConfigChanged(dataCFG* config1, dataCFG* config2)
       {
         return true;
       }
-      if(config1->midiPins[i] != config2->midiPins[i])
+      if(config1->midiNotes[i] != config2->midiNotes[i])
       {
         return true;
       }
@@ -329,12 +403,7 @@ inline void dadaSysEx::copyConfig(dataCFG* src, dataCFG* dest)
     for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       dest->midiChannels[i] = src->midiChannels[i];
-      dest->midiPins[i] = src->midiPins[i];
-    }
-
-    for (int j = 0; j < 8; ++j)
-    {
-      dest->alignfiller[j] = 0;
+      dest->midiNotes[i] = src->midiNotes[i];
     }
 }
     
@@ -343,6 +412,18 @@ bool dadaSysEx::hasConfigChanged(velocityCFG* config1, velocityCFG* config2)
     for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       if(config1->velocityProgram[i] != config2->velocityProgram[i])
+      {
+        return true;
+      }
+      if(config1->min_milli[i] != config2->min_milli[i])
+      {
+        return true;
+      }
+      if(config1->max_milli[i] != config2->max_milli[i])
+      {
+        return true;
+      }
+      if(config1->curve_power[i] != config2->curve_power[i])
       {
         return true;
       }
@@ -356,7 +437,37 @@ inline void dadaSysEx::copyConfig(velocityCFG* src, velocityCFG* dest)
     for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
     {
       dest->velocityProgram[i] = src->velocityProgram[i];
+      dest->min_milli[i] = src->min_milli[i];
+      dest->max_milli[i] = src->max_milli[i];
+      dest->curve_power[i] = src->curve_power[i];
     }
+}
+
+
+void dadaSysEx::encodeForSysex(velocityCFG* veloP) {
+    for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+    {
+      int lowerPart = veloP->min_milli[i] & 0x007F;
+      int upperPart = veloP->min_milli[i] & 0x3F80;
+      veloP->min_milli[i] = lowerPart | (upperPart << 1);
+  
+      lowerPart = veloP->max_milli[i] & 0x007F;
+      upperPart = veloP->max_milli[i] & 0x3F80;
+      veloP->max_milli[i] = lowerPart | (upperPart << 1);
+    }
+}
+
+void dadaSysEx::decodeForSysex(velocityCFG* veloP) {
+  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i)
+  {
+    int lowerPart = veloP->min_milli[i] & 0x007F;
+    int upperPart = veloP->min_milli[i] & 0x7F00;
+    veloP->min_milli[i] = lowerPart | (upperPart >> 1);
+    
+    lowerPart = veloP->max_milli[i] & 0x007F;
+    upperPart = veloP->max_milli[i] & 0x7F00;
+    veloP->max_milli[i] = lowerPart | (upperPart >> 1);
+  }
 }
 
 bool dadaSysEx::hasConfigChanged(gateCFG* config1, gateCFG* config2)
