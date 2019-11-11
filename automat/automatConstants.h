@@ -35,6 +35,7 @@
 
 
 #define AUTOMAT_MINI 0
+#define LAUNCHPAD_SUPPORT 1
 
 const int SYSEX_FIRMWARE_VERSION = 0x02000000;          // = version 2.0.0
 
@@ -86,5 +87,3 @@ const int MAX_PROGRAM = 4;                              // The index of the maxi
 #endif
 
 #endif
-
-

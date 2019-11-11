@@ -416,7 +416,7 @@ void receiveI2CEvent(int len)
         char pin = Wire.read();
         char velocity = Wire.read();
         if (velocity > 0) {
-          handleNoteOn(pin, 127);
+          handleNoteOn(pin, velocity);
         } else {
           handleNoteOff(pin);
         }
@@ -428,6 +428,15 @@ void receiveI2CEvent(int len)
         uint8_t byte2 = Wire.read();
         uint8_t byte3 = Wire.read();
 
+#if LAUNCHPAD_SUPPORT
+        char pin = byte2 - 1;
+        char velocity = byte3;
+        if (velocity > 0) {
+          handleNoteOn(pin, velocity);
+        } else {
+          handleNoteOff(pin);
+        }
+#else
         uint8_t header = byte1 & 0xF0;
         switch (header) {
           case 0x80:  // Note-off
@@ -443,6 +452,7 @@ void receiveI2CEvent(int len)
           default:
               break;                              // skip other MIDI Event Types
         }
+#endif
       }
       break;  
   }
@@ -549,4 +559,3 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
       max_min_map[pin][i] = v;
    }    
 }
-
