@@ -72,6 +72,13 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi2);   // DIN Midi Stuff
 dadaMidiLearn midiLearn(&nvData);                       // lern class + load/save from eeprom
 dadaSysEx sysex(&nvData, &programData, &midi2);
 
+#if LAUNCHPAD_SUPPORT
+unsigned int clockcount = (unsigned int)0xFFFFFFFF;
+unsigned int lastclockcount = (unsigned int)0xFFFFFFFF;
+byte clockstate = 0;
+byte lastclockstate = 0;
+#endif
+
 void setup() {
   Serial1.begin(31250);                                 // set up MIDI baudrate
   pinMode(SHIFT_REGISTER_ENABLE, OUTPUT);               // enable Shiftregister
@@ -86,6 +93,7 @@ void setup() {
 
   Wire.begin(AUTOMAT_ADDR);                             // join i2c bus
   Wire.onReceive(receiveI2CEvent);                      // register event
+  Wire.onRequest(requestI2CEvent);
 
   midi2.setHandleProgramChange(handleProgramChange);
   midi2.setHandleNoteOn(handleNoteOn);                  // add Handler for Din MIDI
@@ -93,6 +101,10 @@ void setup() {
   midi2.setHandleSystemExclusive(handleSysEx);
   midi2.setHandleControlChange(handleControlChange);
   midi2.setHandlePitchBend(handlePitchBend);
+  midi2.setHandleClock(handleClock);
+  midi2.setHandleStart(handleStart);
+  midi2.setHandleStop(handleStop);
+  midi2.setHandleContinue(handleContinue);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
@@ -201,8 +213,32 @@ void loop() {
               break;
             }
             case SYSEX_START: // SystemExclusive
-              if (sysex.handleSysExUSBPacket(rx)) {
-                 statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+              switch (rx.byte1) {
+                case 0xF0:
+                  if (sysex.handleSysExUSBPacket(rx)) {
+                     statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+                  }
+                break;
+                case 0xF8:
+                {
+                  handleClock();
+                  break;
+                }
+                case 0xFA:
+                {
+                  handleStart();
+                  break;
+                }
+                case 0xFB:
+                {
+                  handleContinue();
+                  break;
+                }
+                case 0xFC:
+                {
+                  handleStop();
+                  break;
+                }
               }
               break;
           }
@@ -346,6 +382,40 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   }
 }
 
+void handleClock() {
+#if LAUNCHPAD_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      ++clockcount;
+   } else {
+      clockcount = 0;
+   }
+#endif
+}
+
+void handleStart() {
+#if LAUNCHPAD_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      clockstate = 1;
+   }
+#endif
+}
+  
+void handleContinue() {
+#if LAUNCHPAD_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      clockstate = 2;
+   }
+#endif
+}
+ 
+void handleStop() {
+#if LAUNCHPAD_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      clockstate = 4;
+   }
+#endif
+}
+
 void handleControlChange(byte channel, byte number, byte value) {
   switch (number) {
     case MIDI_CC_MOD_WHEEL:
@@ -402,6 +472,26 @@ void handleMaxConfig(byte pin, int val, int power) {
 void handlePitchBend(byte channel, int bend) {
 #if PWM_SUPPORT
   PWMManager::handlePitchBend(channel, bend);
+#endif
+}
+
+void requestI2CEvent()
+{
+#if LAUNCHPAD_SUPPORT
+  if((lastclockcount == clockcount) && (lastclockstate == clockstate)) {
+    Wire.write(127);
+  } else {
+    byte msg[5];
+    msg[0] = clockstate;
+    msg[1] = clockcount >> 24;
+    msg[2] = (clockcount >> 16) & 0x0FF;
+    msg[3] = (clockcount >> 8) & 0x0FF;
+    msg[4] = clockcount & 0x0FF;
+    
+    Wire.write(msg, 5);  
+    lastclockcount = clockcount;
+    lastclockstate = clockstate;
+  }
 #endif
 }
 
