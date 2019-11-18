@@ -49,10 +49,18 @@ extern void handleMinConfig(byte pin, int val, int power);
 extern void handleMaxConfig(byte pin, int val, int power);
 byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN + 1];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
+byte dadaSysEx::structBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 programCFG storedDataForCompare;
 
 bool dadaSysEx::safeToRead(byte * now, const byte* before, unsigned bufferLen, unsigned readLen) {
   return (now - before) <= bufferLen - readLen; 
+}
+
+byte* dadaSysEx::getStructFromArray(byte* arr, int len) {
+   byte* pAligned = structBuffer;
+   pAligned += 4 - (((int)pAligned) % 4);
+   memcpy(pAligned, arr, len);
+   return pAligned;
 }
 
 bool dadaSysEx::handleSysEx(byte * arr, unsigned int len)
@@ -113,7 +121,6 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned int len)
    arr += sizeof(int);
    lenRemaining -= sizeof(int);
 
-
    if (len == SYSEX_GET_CONFIG_LEN)
    {
        if (getIntFromArray(arr) == SYSEX_CONFIG_GET_CONFIG)
@@ -153,7 +160,7 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned int len)
 
    SYSEX_DEBUG("Sysex read config");
 
-   dataCFG* dataP = (dataCFG*) arr;
+   dataCFG* dataP = (dataCFG*) getStructFromArray(arr, sizeof(dataCFG));
 
    if (hasConfigChanged(cfgData, dataP))
    {
@@ -175,7 +182,7 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned int len)
    SYSEX_DEBUG("Sysex check velo");
    storedDataForCompare = programStore.read();
    
-   velocityCFG* veloP = (velocityCFG*) arr;
+   velocityCFG* veloP = (velocityCFG*) getStructFromArray(arr, sizeof(velocityCFG));
    bool programChanged = false;
    decodeForSysex(veloP);
    if (hasConfigChanged(&(storedDataForCompare.velocityConfig), veloP))
@@ -198,7 +205,7 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned int len)
      arr += sizeof(int);
      lenRemaining -= sizeof(int);
   
-     gateCFG* gateP = (gateCFG*) arr;
+     gateCFG* gateP = (gateCFG*) getStructFromArray(arr, sizeof(gateCFG));
      decodeForSysex(gateP);
      if (hasConfigChanged(&(storedDataForCompare.gateConfig), gateP))
      {
