@@ -70,7 +70,7 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi2);   // DIN Midi Stuff
 dadaMidiLearn midiLearn(&nvData);                       // lern class + load/save from eeprom
 dadaSysEx sysex(&nvData, &programData, &midi2);
 
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
 unsigned int clockcount = (unsigned int)0xFFFFFFFF;
 unsigned int lastclockcount = (unsigned int)0xFFFFFFFF;
 byte clockstate = 0;
@@ -381,7 +381,7 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
 }
 
 void handleClock() {
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
    if (clockcount != (unsigned int)0xFFFFFFFF) {
       ++clockcount;
    } else {
@@ -391,7 +391,7 @@ void handleClock() {
 }
 
 void handleStart() {
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
    if (clockcount != (unsigned int)0xFFFFFFFF) {
       clockstate = 1;
    }
@@ -399,7 +399,7 @@ void handleStart() {
 }
   
 void handleContinue() {
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
    if (clockcount != (unsigned int)0xFFFFFFFF) {
       clockstate = 2;
    }
@@ -407,7 +407,7 @@ void handleContinue() {
 }
  
 void handleStop() {
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
    if (clockcount != (unsigned int)0xFFFFFFFF) {
       clockstate = 4;
    }
@@ -475,7 +475,7 @@ void handlePitchBend(byte channel, int bend) {
 
 void requestI2CEvent()
 {
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
   if((lastclockcount == clockcount) && (lastclockstate == clockstate)) {
     Wire.write(127);
   } else {
@@ -516,7 +516,7 @@ void receiveI2CEvent(int len)
         uint8_t byte2 = Wire.read();
         uint8_t byte3 = Wire.read();
 
-#if LAUNCHPAD_SUPPORT
+#if SIS_SUPPORT
         char pin = byte2 - 1;
         char velocity = byte3;
         if (velocity > 0) {

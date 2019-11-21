@@ -35,7 +35,7 @@
 
 
 #define AUTOMAT_MINI 0
-#define LAUNCHPAD_SUPPORT 1
+#define SIS_SUPPORT 1
 
 const int SYSEX_FIRMWARE_VERSION = 0x02000002;          // = version 2.0.2
 
