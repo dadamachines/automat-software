@@ -12,8 +12,6 @@
 
 // constants
 // i2c constants
-// TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
-// so we can mimic its teletype API. Future address will be 0xDA.
 const int AUTOMAT_ADDR = 0xDA;
 const int I2C_SET = 0;                                  // prepared set of Output Pin and Velocity
 const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/Note/Velocity
