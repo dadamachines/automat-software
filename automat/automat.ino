@@ -12,9 +12,7 @@
 
 // constants
 // i2c constants
-// TODO: this is the temporary i2c address same as the TELEXo Teletype Expander,
-// so we can mimic its teletype API. Future address will be 0xDA.
-const int AUTOMAT_ADDR = 0x60;
+const int AUTOMAT_ADDR = 0xDA;
 const int I2C_SET = 0;                                  // prepared set of Output Pin and Velocity
 const int I2C_MIDI_SET = 1;                           // MIDI Event set Chanel/Note/Velocity
 
@@ -72,6 +70,13 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi2);   // DIN Midi Stuff
 dadaMidiLearn midiLearn(&nvData);                       // lern class + load/save from eeprom
 dadaSysEx sysex(&nvData, &programData, &midi2);
 
+#if SIS_SUPPORT
+unsigned int clockcount = (unsigned int)0xFFFFFFFF;
+unsigned int lastclockcount = (unsigned int)0xFFFFFFFF;
+byte clockstate = 0;
+byte lastclockstate = 0;
+#endif
+
 void setup() {
   Serial1.begin(31250);                                 // set up MIDI baudrate
   pinMode(SHIFT_REGISTER_ENABLE, OUTPUT);               // enable Shiftregister
@@ -86,6 +91,7 @@ void setup() {
 
   Wire.begin(AUTOMAT_ADDR);                             // join i2c bus
   Wire.onReceive(receiveI2CEvent);                      // register event
+  Wire.onRequest(requestI2CEvent);
 
   midi2.setHandleProgramChange(handleProgramChange);
   midi2.setHandleNoteOn(handleNoteOn);                  // add Handler for Din MIDI
@@ -93,6 +99,10 @@ void setup() {
   midi2.setHandleSystemExclusive(handleSysEx);
   midi2.setHandleControlChange(handleControlChange);
   midi2.setHandlePitchBend(handlePitchBend);
+  midi2.setHandleClock(handleClock);
+  midi2.setHandleStart(handleStart);
+  midi2.setHandleStop(handleStop);
+  midi2.setHandleContinue(handleContinue);
   midi2.begin(MIDI_CHANNEL_OMNI);
   // init();
 
@@ -201,8 +211,32 @@ void loop() {
               break;
             }
             case SYSEX_START: // SystemExclusive
-              if (sysex.handleSysExUSBPacket(rx)) {
-                 statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+              switch (rx.byte1) {
+                case 0xF0:
+                  if (sysex.handleSysExUSBPacket(rx)) {
+                     statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
+                  }
+                break;
+                case 0xF8:
+                {
+                  handleClock();
+                  break;
+                }
+                case 0xFA:
+                {
+                  handleStart();
+                  break;
+                }
+                case 0xFB:
+                {
+                  handleContinue();
+                  break;
+                }
+                case 0xFC:
+                {
+                  handleStop();
+                  break;
+                }
               }
               break;
           }
@@ -346,6 +380,40 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
   }
 }
 
+void handleClock() {
+#if SIS_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      ++clockcount;
+   } else {
+      clockcount = 0;
+   }
+#endif
+}
+
+void handleStart() {
+#if SIS_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      clockstate = 1;
+   }
+#endif
+}
+  
+void handleContinue() {
+#if SIS_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      clockstate = 2;
+   }
+#endif
+}
+ 
+void handleStop() {
+#if SIS_SUPPORT
+   if (clockcount != (unsigned int)0xFFFFFFFF) {
+      clockstate = 4;
+   }
+#endif
+}
+
 void handleControlChange(byte channel, byte number, byte value) {
   switch (number) {
     case MIDI_CC_MOD_WHEEL:
@@ -405,6 +473,26 @@ void handlePitchBend(byte channel, int bend) {
 #endif
 }
 
+void requestI2CEvent()
+{
+#if SIS_SUPPORT
+  if((lastclockcount == clockcount) && (lastclockstate == clockstate)) {
+    Wire.write(127);
+  } else {
+    byte msg[5];
+    msg[0] = clockstate;
+    msg[1] = clockcount >> 24;
+    msg[2] = (clockcount >> 16) & 0x0FF;
+    msg[3] = (clockcount >> 8) & 0x0FF;
+    msg[4] = clockcount & 0x0FF;
+    
+    Wire.write(msg, 5);  
+    lastclockcount = clockcount;
+    lastclockstate = clockstate;
+  }
+#endif
+}
+
 void receiveI2CEvent(int len)
 {
   int r = Wire.read();
@@ -416,7 +504,7 @@ void receiveI2CEvent(int len)
         char pin = Wire.read();
         char velocity = Wire.read();
         if (velocity > 0) {
-          handleNoteOn(pin, 127);
+          handleNoteOn(pin, velocity);
         } else {
           handleNoteOff(pin);
         }
@@ -428,21 +516,15 @@ void receiveI2CEvent(int len)
         uint8_t byte2 = Wire.read();
         uint8_t byte3 = Wire.read();
 
-        uint8_t header = byte1 & 0xF0;
-        switch (header) {
-          case 0x80:  // Note-off
-              handleNoteOff(1 + (byte1 & 0x0F), byte2, byte3);
-              break;
-          case 0x90:  // Note-on
-              if(byte3 == 0) {                  // Interpret NoteOn Message with Velocity = 0 as NoteOff
-                handleNoteOff(1 + (byte1 & 0x0F), byte2, byte3);
-              } else {
-                handleNoteOn(1 + (byte1 & 0x0F), byte2, byte3);
-              }
-              break;
-          default:
-              break;                              // skip other MIDI Event Types
+#if SIS_SUPPORT
+        char pin = byte2 - 1;
+        char velocity = byte3;
+        if (velocity > 0) {
+          handleNoteOn(pin, velocity);
+        } else {
+          handleNoteOff(pin);
         }
+#endif
       }
       break;  
   }
@@ -549,4 +631,3 @@ void initMaxMinMap(int pin, int min_range, int max_range, int power)
       max_min_map[pin][i] = v;
    }    
 }
-

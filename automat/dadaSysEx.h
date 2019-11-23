@@ -60,9 +60,11 @@ class dadaSysEx {
     static const int SYSEX_SET_MIN_MAX_LEN = 3 + 6 + 2;
     static const int SYSEX_VERSION_LEN = 3 + (sizeof (int) * 3);
     static const int MAX_SYSEX_MESSAGE_SIZE = 128;
-  
-    static byte sysexOutArr[SYSEX_CONFIG_LEN];
+
+  // added 1 to this output array so that the UsbSysExBuffer is properly aligned
+    static byte sysexOutArr[SYSEX_CONFIG_LEN + 1];
     static byte UsbSysExBuffer[MAX_SYSEX_MESSAGE_SIZE];
+    static byte structBuffer[MAX_SYSEX_MESSAGE_SIZE];
 
     dataCFG * cfgData;
     programCFG * cfgProgram;
@@ -114,6 +116,8 @@ protected:
   inline static void copyConfig(gateCFG* src, gateCFG* dest);
       
   inline static void MidiUSB_sendSysEx(byte *data, size_t len);
+
+  inline static byte* getStructFromArray(byte* arr, int size);
   
 private:
   inline static int getIntFromArray(byte* arr);

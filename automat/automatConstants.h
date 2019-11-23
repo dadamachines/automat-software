@@ -35,8 +35,9 @@
 
 
 #define AUTOMAT_MINI 0
+#define SIS_SUPPORT 1
 
-const int SYSEX_FIRMWARE_VERSION = 0x02000000;          // = version 2.0.0
+const int SYSEX_FIRMWARE_VERSION = 0x02000002;          // = version 2.0.2
 
 #if AUTOMAT_MINI
 const int OUTPUT_PINS_COUNT = 6;                       //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
@@ -86,5 +87,3 @@ const int MAX_PROGRAM = 4;                              // The index of the maxi
 #endif
 
 #endif
-
-

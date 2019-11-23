@@ -35,24 +35,45 @@
 
 #pragma once
 
+#if 0
+#define SYSEX_DEBUG_CONT(X) SerialUSB.print(X)
+#define SYSEX_DEBUG(X) SerialUSB.println(X);SerialUSB.flush()
+#else
+#define SYSEX_DEBUG_CONT(X)
+#define SYSEX_DEBUG(X)
+#endif
+
 extern void mapFixedDurationConfig();
 extern void initMaxMinMap();
 extern void handleMinConfig(byte pin, int val, int power);
 extern void handleMaxConfig(byte pin, int val, int power);
-byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN];
+byte dadaSysEx::sysexOutArr[dadaSysEx::SYSEX_CONFIG_LEN + 1];
 byte dadaSysEx::UsbSysExBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
+byte dadaSysEx::structBuffer[dadaSysEx::MAX_SYSEX_MESSAGE_SIZE];
 programCFG storedDataForCompare;
 
 bool dadaSysEx::safeToRead(byte * now, const byte* before, unsigned bufferLen, unsigned readLen) {
   return (now - before) <= bufferLen - readLen; 
 }
 
-bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
+byte* dadaSysEx::getStructFromArray(byte* arr, int len) {
+   byte* pAligned = structBuffer;
+   pAligned += 4 - (((int)pAligned) % 4);
+   memcpy(pAligned, arr, len);
+   return pAligned;
+}
+
+bool dadaSysEx::handleSysEx(byte * arr, unsigned int len)
 {
+   SYSEX_DEBUG_CONT("handling Sysex of len ");
+   SYSEX_DEBUG(len);
+
+   unsigned int lenRemaining = len;
    const byte* startFrame = arr;
    if(len > 1 && (*arr == SYSEX_START))
    {
       arr++;
+      lenRemaining--;
       // ignore the sysex framing
    }
   
@@ -68,8 +89,10 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
    }
 
    if (*arr++ != 0) {
+     SYSEX_DEBUG("Sysex bad delimiter");
      return false;
    }
+   lenRemaining--;
 
    if (getIntFromArray(arr) != SYSEX_CONFIG_HEADER)
    {
@@ -92,9 +115,11 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
          handleMaxConfig(pin, value, power);        
          return true;
        }
+       SYSEX_DEBUG("Sysex bad header");
        return false;
    }
    arr += sizeof(int);
+   lenRemaining -= sizeof(int);
 
    if (len == SYSEX_GET_CONFIG_LEN)
    {
@@ -112,24 +137,30 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
          sendVersionToSysEx();
          return true;
        }
+       SYSEX_DEBUG("Sysex bad len");
        return false;
    }
    
    if (getIntFromArray(arr) != SYSEX_CONFIG_PINS)
    {
+       SYSEX_DEBUG("Sysex bad pins header");
        return false;
    }
    arr += sizeof(int);
+   lenRemaining -= sizeof(int);
 
    const int numPins = getIntFromArray(arr) & 0x0FF;
    if (numPins != OUTPUT_PINS_COUNT)
    {
+       SYSEX_DEBUG("Sysex bad count header");
        return false;
    }
    arr += sizeof(int);
+   lenRemaining -= sizeof(int);
 
+   SYSEX_DEBUG("Sysex read config");
 
-   dataCFG* dataP = (dataCFG*) arr;
+   dataCFG* dataP = (dataCFG*) getStructFromArray(arr, sizeof(dataCFG));
 
    if (hasConfigChanged(cfgData, dataP))
    {
@@ -138,33 +169,43 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
       nvStore.write(*cfgData);
    }
    arr += sizeof(dataCFG);
+   lenRemaining -= sizeof(dataCFG);
     
    if (getIntFromArray(arr) != SYSEX_CONFIG_VELOCITY)
    {
+       SYSEX_DEBUG("Sysex bad vel header");
        return false;
    }
    arr += sizeof(int);
-
+   lenRemaining -= sizeof(int);
    
+   SYSEX_DEBUG("Sysex check velo");
    storedDataForCompare = programStore.read();
-   velocityCFG* veloP = (velocityCFG*) arr;
+   
+   velocityCFG* veloP = (velocityCFG*) getStructFromArray(arr, sizeof(velocityCFG));
    bool programChanged = false;
    decodeForSysex(veloP);
    if (hasConfigChanged(&(storedDataForCompare.velocityConfig), veloP))
    {
+      SYSEX_DEBUG("Sysex writing velo");
       // avoid writing to Flash unless there is a need
       copyConfig(veloP, &(cfgProgram->velocityConfig));
       programChanged = true;
+      SYSEX_DEBUG("Sysex writing velo done");
    }
 
    arr += sizeof(velocityCFG);
+   lenRemaining -= sizeof(velocityCFG);
 
+   SYSEX_DEBUG("Sysex check gate");
    if (safeToRead(arr, startFrame, len, sizeof(gateCFG) + sizeof(int)) && getIntFromArray(arr) == SYSEX_CONFIG_GATE)
    {
+     SYSEX_DEBUG("Sysex writing gate");
      // gate is an optional config section
      arr += sizeof(int);
+     lenRemaining -= sizeof(int);
   
-     gateCFG* gateP = (gateCFG*) arr;
+     gateCFG* gateP = (gateCFG*) getStructFromArray(arr, sizeof(gateCFG));
      decodeForSysex(gateP);
      if (hasConfigChanged(&(storedDataForCompare.gateConfig), gateP))
      {
@@ -176,14 +217,19 @@ bool dadaSysEx::handleSysEx(byte * arr, unsigned len)
   
      // I know this line is not really needed, but I don't want it forgotten when we extend this method
      arr += sizeof(gateCFG);
+     lenRemaining -= sizeof(gateCFG);
+     SYSEX_DEBUG("Sysex writing gate done");
    }
 
    if (programChanged) 
    {
+      SYSEX_DEBUG("Sysex program changed");
       programStore.write(*cfgProgram);
       initMaxMinMap();
    }
    
+   SYSEX_DEBUG("Sysex success");
+   SYSEX_DEBUG(lenRemaining);
    return true;
 }
 
