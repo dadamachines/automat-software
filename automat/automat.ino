@@ -524,22 +524,6 @@ void receiveI2CEvent(int len)
         } else {
           handleNoteOff(pin);
         }
-#else
-        uint8_t header = byte1 & 0xF0;
-        switch (header) {
-          case 0x80:  // Note-off
-              handleNoteOff(1 + (byte1 & 0x0F), byte2, byte3);
-              break;
-          case 0x90:  // Note-on
-              if(byte3 == 0) {                  // Interpret NoteOn Message with Velocity = 0 as NoteOff
-                handleNoteOff(1 + (byte1 & 0x0F), byte2, byte3);
-              } else {
-                handleNoteOn(1 + (byte1 & 0x0F), byte2, byte3);
-              }
-              break;
-          default:
-              break;                              // skip other MIDI Event Types
-        }
 #endif
       }
       break;  
