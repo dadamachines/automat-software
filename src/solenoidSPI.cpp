@@ -3,8 +3,8 @@
    Author: Tobias Münzer
    All rights reserved.
 
-   Redistribution and use in source and binary forms, with or without modification,
-   are permitted provided that the following conditions are met:
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions are met:
 
     1. Redistributions of source code must retain the above copyright notice,
        this list of conditions and the following disclaimer.
@@ -13,24 +13,25 @@
        this list of conditions and the following disclaimer in the documentation
         and/or other materials provided with the distribution.
 
-    3. Neither the name of DADAMACHINES nor the names of its contributors may be used
-       to endorse or promote products derived from this software without
+    3. Neither the name of DADAMACHINES nor the names of its contributors may be
+   used to endorse or promote products derived from this software without
        specific prior written permission.
 
    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-   FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-   CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-   OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+   POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "solenoidSPI.h"
 #include "automatConstants.h"
+#include "solenoidSPI.h"
 
 /*! The constructor takes two parameters.  The first is an SPI class
     pointer.  This is the address of an SPI object (either the default
@@ -39,18 +40,16 @@
     to use when communicating with the shift registers.
 
     Example:
-
-
         SOLSPI mySolenoids(&SPI, A1);
 
 */
 #ifdef __PIC32MX__
-SOLSPI:: SOLSPI(DSPI *spi, uint8_t cs) {
+SOLSPI::SOLSPI(DSPI *spi, uint8_t cs) {
 #else
-SOLSPI:: SOLSPI(SPIClass *spi, uint8_t cs) {
+SOLSPI::SOLSPI(SPIClass *spi, uint8_t cs) {
 #endif
   _spi = spi;
-  _cs = cs;
+  _cs  = cs;
 }
 
 #ifdef __PIC32MX__
@@ -59,7 +58,7 @@ SOLSPI::SOLSPI(DSPI &spi, uint8_t cs) {
 SOLSPI::SOLSPI(SPIClass &spi, uint8_t cs) {
 #endif
   _spi = &spi;
-  _cs = cs;
+  _cs  = cs;
 }
 
 void SOLSPI::begin() {
@@ -67,10 +66,10 @@ void SOLSPI::begin() {
   _spi->begin();
   pinMode(_cs, OUTPUT);
   digitalWrite(_cs, LOW);
-  sendState();        //switch off all outputs
+  sendState(); // switch off all outputs
 }
 
-void SOLSPI::sendState()  {
+void SOLSPI::sendState() {
   digitalWrite(_cs, LOW);
   _spi->transfer(outputState & 0xFF);
   _spi->transfer(outputState >> 8);
@@ -89,23 +88,23 @@ void SOLSPI::clearOutput(uint8_t num) {
 
 void SOLSPI::singlePin(uint8_t num, bool on_or_off) {
   uint16_t backup_outputState = outputState;
-  for (int i = 0 ; i < OUTPUT_PINS_COUNT ; i++) {
+  for (int i = 0; i < OUTPUT_PINS_COUNT; i++) {
     if (num == i && on_or_off) {
       backup_outputState |= (1 << translatePinNumber(i));
     } else {
       backup_outputState &= ~(1 << translatePinNumber(i));
     }
   }
-  if (backup_outputState != outputState)  {
-    outputState=backup_outputState;
+  if (backup_outputState != outputState) {
+    outputState = backup_outputState;
     sendState();
   }
 }
 
-uint8_t  SOLSPI::translatePinNumber(uint8_t n)  {
+uint8_t SOLSPI::translatePinNumber(uint8_t n) {
 #if AUTOMAT_MINI
   const uint8_t nums[OUTPUT_PINS_COUNT] = {15, 11, 10, 14, 12, 13};
-#else 
+#else
   const uint8_t nums[OUTPUT_PINS_COUNT] = {15, 13, 12, 11, 7, 3, 14, 10, 9, 6, 5, 4};
 #endif
   if (n >= OUTPUT_PINS_COUNT)
@@ -113,5 +112,3 @@ uint8_t  SOLSPI::translatePinNumber(uint8_t n)  {
   else
     return nums[n];
 }
-
-
