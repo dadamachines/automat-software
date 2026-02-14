@@ -63,13 +63,17 @@ def convert_bin_to_uf2(bin_path, uf2_path):
     print(f"UF2: {uf2_path} ({len(bin_data)} bytes, {num_blocks} blocks)")
 
 
+# Firmware version for the output filename (keep in sync with automatConstants.h)
+FIRMWARE_VERSION = "3.0.1"
+
+
 def post_build_uf2(source, target, env):
     firmware_bin = os.path.join(
         env.subst("$BUILD_DIR"), env.subst("${PROGNAME}.bin")
     )
-    firmware_uf2 = os.path.join(
-        env.subst("$BUILD_DIR"), env.subst("${PROGNAME}.uf2")
-    )
+    # Named UF2: automat-sw_<version>.ino.automat.uf2
+    uf2_name = f"automat-sw_{FIRMWARE_VERSION}.ino.automat.uf2"
+    firmware_uf2 = os.path.join(env.subst("$BUILD_DIR"), uf2_name)
 
     if os.path.isfile(firmware_bin):
         convert_bin_to_uf2(firmware_bin, firmware_uf2)

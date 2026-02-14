@@ -12,6 +12,10 @@ Built with [PlatformIO](https://platformio.org/) using the [Adafruit Arduino SAM
 - USB MIDI + DIN MIDI input
 - UF2 bootloader for drag-and-drop firmware updates
 
+## Configuration
+
+Use the [automat configurator](https://dadamachines.github.io/automat-configurator/) (WebMIDI) to set per-output velocity programs, min/max timing, and gate durations. Source: [dadamachines/automat-configurator](https://github.com/dadamachines/automat-configurator)
+
 ## Build
 
 ### Prerequisites
@@ -26,7 +30,7 @@ pio run
 
 After a successful build the firmware files are in `.pio/build/automat/`:
 - `firmware.bin` — raw binary
-- `firmware.uf2` — UF2 file for drag-and-drop flashing
+- `automat-sw_<version>.ino.automat.uf2` — UF2 file for drag-and-drop flashing
 
 ### Upload via SAM-BA (serial)
 
@@ -79,19 +83,21 @@ Managed automatically by PlatformIO (declared in `platformio.ini`):
 
 ## Change log
 
+- V3.01 — Version bump, named UF2 output, README updates
 - V3.00 — PlatformIO migration, Adafruit SAMD core, UF2 output
 - V1.10 2018.04.15 — Velocity support added
 - V1.00 2017.10.19 — Initial release
 
 ## Related Repositories
 
-- [dadamachines/arduino-board-index](https://github.com/dadamachines/arduino-board-index) — Legacy Arduino Board Support Package
+- [dadamachines/automat-configurator](https://github.com/dadamachines/automat-configurator) — WebMIDI configurator for velocity/gate settings
 - [dadamachines/uf2-samdx1](https://github.com/dadamachines/uf2-samdx1/tree/dadamachines) — UF2 bootloader (fork of microsoft/uf2-samdx1)
+- [dadamachines/arduino-board-index](https://github.com/dadamachines/arduino-board-index) — Legacy Arduino Board Support Package (superseded by this PlatformIO project)
 
 ## Contact
 
-To report a bug, contribute, discuss on usage, or simply request support, please [create an issue here](https://github.com/dadamachines/automat-software/issues/new).
+To report a bug, contribute, discuss on usage, or simply request support, please [create an issue here](https://github.com/dadamachines/automat-software/issues/new) or reach out via [dadamachines.com/contact](https://dadamachines.com/contact/).
 
 ## License
 
-[GPLv3](https://github.com/dadamachines/automat-software/blob/master/LICENSE) © 2018 [dadamachines](https://dadamachines.com)
+[GPLv3](https://github.com/dadamachines/automat-software/blob/master/LICENSE) Copyright © 2014-2026, Johannes Elias Lohbihler for [dadamachines](https://dadamachines.com)
