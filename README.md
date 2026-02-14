@@ -12,6 +12,10 @@ Built with [PlatformIO](https://platformio.org/) using the [Adafruit Arduino SAM
 - USB MIDI + DIN MIDI input
 - UF2 bootloader for drag-and-drop firmware updates
 
+## USB Power & iOS Compatibility
+
+The firmware declares a USB bus-current draw of 100 mA (Adafruit SAMD core default). The original dadamachines BSP declared 20 mA. Both values are well within the USB 2.0 limit of 500 mA, so the automat enumerates normally on iPads and other iOS devices. Solenoid power is supplied externally and is not drawn from USB.
+
 ## Configuration
 
 Use the [automat configurator](https://dadamachines.github.io/automat-configurator/) (WebMIDI) to set per-output velocity programs, min/max timing, and gate durations. Source: [dadamachines/automat-configurator](https://github.com/dadamachines/automat-configurator)
