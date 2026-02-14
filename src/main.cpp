@@ -35,7 +35,6 @@ void requestI2CEvent();
 void doubleclick();
 void singleclick();
 void longButtonPress();
-void mapFixedDurationConfig();
 void initMaxMinMap();
 void initMaxMinMap(int pin, int min_range, int max_range, int power);
 
@@ -70,11 +69,7 @@ programCFG programData;
 FlashStorage(nvStore, dataCFG);
 FlashStorage(programStore, programCFG);
 
-unsigned long milli_stop[OUTPUT_PINS_COUNT]; // time at which to stop note for program 0
-int loop_countdown[OUTPUT_PINS_COUNT];       // This is the total number of loops left
-// where we will execute a PWM
-int gateDuration[OUTPUT_PINS_COUNT]; // This is the total number of loops
-// configured for this one-shot trigger
+unsigned long milli_stop[OUTPUT_PINS_COUNT]; // time at which to stop note for MAX_MIN_PROGRAM
 int32_t max_min_map[OUTPUT_PINS_COUNT][128];
 
 #include "solenoidSPI.h"
@@ -112,7 +107,7 @@ void setup() {
   pinMode(LEARN_MODE_PIN, INPUT_PULLUP);        //
   button.attachDoubleClick(doubleclick);        // register button for learnmodes
   button.attachClick(singleclick);              // register button for learnmodes
-  button.setPressTicks(3000);                   // set a long press to be three seconds
+  button.setPressMs(3000);                      // set a long press to be three seconds
   button.attachLongPressStart(longButtonPress); // register button for sysex transmission
   solenoids.begin();                            // start shiftregister
 
@@ -135,7 +130,6 @@ void setup() {
   programData = programStore.read();
   // if uninitialized, this value should be read as -1
   sysex.sanitizeVelocityConfig(&(programData.velocityConfig));
-  mapFixedDurationConfig();
   initMaxMinMap();
 
   statusLED.blink(20, 30, 32);
@@ -167,22 +161,6 @@ void loop() {
           milli_stop[i] = 0;
         }
         break;
-      case FIXED_GATE_PROGRAM:
-      case QUADRATIC_PROGRAM:
-      case INVERSE_QUADRATIC_PROGRAM: {
-        // new single pulse width via velocity
-        if (loop_countdown[i] > 1) {
-          if (loop_countdown[i] < NO_COUNTDOWN) {
-            loop_countdown[i]--;
-          }
-          continue;
-        }
-        if (loop_countdown[i] > 0) {
-          solenoids.clearOutput(i);
-          loop_countdown[i] = 0;
-        }
-      } break;
-
 #if PWM_SUPPORT
       case PWM_PROGRAM:
       case PWM_MOTOR_PROGRAM:
@@ -312,23 +290,6 @@ void handleNoteOn(byte pin, byte velocity) {
       break;
     }
 
-    case FIXED_GATE_PROGRAM:
-      loop_countdown[pin] = gateDuration[pin]; // set velocity timer
-      break;
-
-    case QUADRATIC_PROGRAM:                      // strategy from 1.1.0  quadratic
-      loop_countdown[pin] = velocity * velocity; // set velocity timer
-      break;
-
-    case INVERSE_QUADRATIC_PROGRAM: // inverse quadratic
-      if (velocity < 120) {
-        velocity            = 120 - velocity;
-        loop_countdown[pin] = COUNTDOWN_START - ((velocity * velocity) * 7 / 8);
-      } else {
-        loop_countdown[pin] = NO_COUNTDOWN;
-      }
-      break;
-
 #if PWM_SUPPORT
     case PWM_PROGRAM:       // true pwm
     case PWM_MOTOR_PROGRAM: // continuous PWM
@@ -369,8 +330,7 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 
 void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
-  loop_countdown[pin] = 0;
-  milli_stop[pin]     = 0;
+  milli_stop[pin] = 0;
 #if PWM_SUPPORT
   PWMManager::handleNoteOff(pin);
 #endif
@@ -577,23 +537,6 @@ void longButtonPress(void) {
 void handleSysEx(byte *arr, unsigned len) {
   if (sysex.handleSysEx(arr, len)) {
     statusLED.blink(20, 10, 8); // LED Settings (On Time, Off Time, Count)
-  }
-}
-
-void mapFixedDurationConfig() {
-  for (int i = 0; i < OUTPUT_PINS_COUNT; ++i) {
-    if (programData.velocityConfig.velocityProgram[i] == FIXED_GATE_PROGRAM) {
-      float duration = programData.gateConfig.durationConfiguration[i];
-      // limit valid values to 1 to 2000 ms
-      if (duration < 1) {
-        duration = 1;
-      } else if (duration > 2000) {
-        duration = 2000;
-      }
-      gateDuration[i] = (duration * LOOP_TIME_FACTOR) + 0.5f;
-    } else {
-      gateDuration[i] = 0;
-    }
   }
 }
 

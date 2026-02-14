@@ -34,7 +34,7 @@
 #define AUTOMAT_MINI 0
 #define SIS_SUPPORT 1
 
-const int SYSEX_FIRMWARE_VERSION = 0x03020000; // = version 3.02
+const int SYSEX_FIRMWARE_VERSION = 0x03100000; // = version 3.10
 
 #if AUTOMAT_MINI
 const int OUTPUT_PINS_COUNT = 6; //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
@@ -46,11 +46,10 @@ const int SHIFT_REGISTER_ENABLE = 27; // Output enable for shiftregister ic
 const int ACTIVITY_LED          = 13; // activity led is still on D13 which is connected
                                       // to PA17 > which means Pin 9 on MKRZero
 
-const int MAX_MIN_PROGRAM           = 0; // The index of the default max/min program
-const int ALWAYS_ON_PROGRAM         = 1; // The index of the always on program
-const int QUADRATIC_PROGRAM         = 2; // The index of the quadratic one pulse program
-const int INVERSE_QUADRATIC_PROGRAM = 3; // The index of the inverse quadratic one pulse program
-const int FIXED_GATE_PROGRAM        = 4; // The index of the one-pulse program with a configured gate duration
+const int MAX_MIN_PROGRAM           = 0; // The index of the default max/min (velocity) program
+const int ALWAYS_ON_PROGRAM         = 1; // The index of the always on (note on/off) program
+// Programs 2-4 are deprecated but index numbers are preserved for SysEx/WebUI compatibility
+// Any stored program 2-4 will be remapped to ALWAYS_ON on boot
 const int MIN_PROGRAM               = 0; // The index of the minimum valid program
 
 enum {
@@ -60,9 +59,6 @@ enum {
   MIDI_CC_ALL_NOTES_OFF     = 123
 };
 
-const int NO_COUNTDOWN       = 14401; // A special value to indicate that we are not using a PWM countdown
-const int COUNTDOWN_START    = 14400; // Maximum number of loops where we apply the PWM
-const float LOOP_TIME_FACTOR = 64.0f; // The number of loops ms per ms according to my cheap oscilliscope
 const int MAX_MIN_INFINITE   = 0;
 
 const int MAX_MIDI_CHANNEL = 16;
@@ -81,5 +77,5 @@ const int HUM_MOTOR_PROGRAM = 7; // The index of the making the motor hum to a n
 
 const int MAX_PROGRAM = 7; // The index of the maximum valid program
 #else
-const int MAX_PROGRAM = 4; // The index of the maximum valid program
+const int MAX_PROGRAM = 1; // Only MAX_MIN (0) and ALWAYS_ON (1) are active
 #endif

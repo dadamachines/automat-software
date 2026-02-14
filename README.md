@@ -18,7 +18,7 @@ The firmware declares a USB bus-current draw of 100 mA (Adafruit SAMD core defau
 
 ## Configuration
 
-Use the [automat configurator](https://dadamachines.github.io/automat-configurator/) (WebMIDI) to set per-output velocity programs, min/max timing, and gate durations. Source: [dadamachines/automat-configurator](https://github.com/dadamachines/automat-configurator)
+Use the [automat configurator](https://automat-configurator.dadamachines.com/) (WebMIDI) to set per-output velocity programs, min/max timing, and gate durations. Source: [dadamachines/automat-configurator](https://github.com/dadamachines/automat-configurator)
 
 ## Build
 
@@ -87,6 +87,7 @@ Managed automatically by PlatformIO (declared in `platformio.ini`):
 
 ## Change log
 
+- V3.10 — Simplify velocity programs: only Default (velocity-mapped timing) and NoteOn/NoteOff (always-on) remain active; deprecated Quadratic, Inverse Quadratic, and Fixed Gate programs are remapped on boot; SysEx/WebUI compatibility preserved
 - V3.02 — Fix I2C message validation, pin bounds checks, PWMManager array bug
 - V3.01 — Version bump, named UF2 output, README updates
 - V3.00 — PlatformIO migration, Adafruit SAMD core, UF2 output

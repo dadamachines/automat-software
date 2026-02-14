@@ -42,7 +42,6 @@
 #define SYSEX_DEBUG(X)
 #endif
 
-extern void mapFixedDurationConfig();
 extern void initMaxMinMap();
 extern void handleMinConfig(byte pin, int val, int power);
 extern void handleMaxConfig(byte pin, int val, int power);
@@ -197,7 +196,7 @@ bool dadaSysEx::handleSysEx(byte *arr, unsigned int len) {
       // avoid writing to Flash unless there is a need
       copyConfig(gateP, &(cfgProgram->gateConfig));
       programChanged = true;
-      mapFixedDurationConfig();
+      // Note: gate duration mapping removed in V3.10 (FIXED_GATE_PROGRAM deprecated)
     }
 
     // I know this line is not really needed, but I don't want it forgotten when
