@@ -120,11 +120,11 @@ void PWMManager::handlePinLoop(int pin, int program) {
       pwm_phase[pin]--;
       pwm_countdown[pin]--;
 
-      if ((pwm_phase[pin] == 0) || (pwm_countdown == 0)) {
+      if ((pwm_phase[pin] == 0) || (pwm_countdown[pin] == 0)) {
         // Restart the phase sequence with the output set high
         solenoids.setOutput(pin);
 
-        if (pwm_countdown == 0) {
+        if (pwm_countdown[pin] == 0) {
           // we are done the PWM part of the note.   Leave the output high until
           // note off.
           pwm_phase[pin] = 0;
@@ -147,7 +147,7 @@ void PWMManager::handlePinLoop(int pin, int program) {
       // step through the PWM phase sequence
       pwm_phase[pin]--;
 
-      if ((pwm_phase[pin] == 0) || (pwm_countdown == 0)) {
+      if ((pwm_phase[pin] == 0) || (pwm_countdown[pin] == 0)) {
         // Restart the PWM counter
         pwm_phase[pin] = calculateTotalHumPhase(pin);
         pwm_level[pin] = calculateLoHumPhase(pin);

@@ -523,29 +523,33 @@ void receiveI2CEvent(int len) {
 
   switch (r) {
     case I2C_SET: // received prepared set of OutputPin and Velocity (=0)
-      if (len = 3) {
-        char pin      = Wire.read();
-        char velocity = Wire.read();
-        if (velocity > 0) {
-          handleNoteOn(pin, velocity);
-        } else {
-          handleNoteOff(pin);
+      if (len == 3) {
+        uint8_t pin      = Wire.read();
+        uint8_t velocity = Wire.read();
+        if (pin < OUTPUT_PINS_COUNT) {
+          if (velocity > 0) {
+            handleNoteOn(pin, velocity);
+          } else {
+            handleNoteOff(pin);
+          }
         }
       }
       break;
     case I2C_MIDI_SET: // received MIDI Event set containing up to 3 Bytes (=1)
-      if (len = 4) {
-        uint8_t byte1 = Wire.read();
+      if (len == 4) {
+        Wire.read(); // status byte (consumed but not used)
         uint8_t byte2 = Wire.read();
         uint8_t byte3 = Wire.read();
 
 #if SIS_SUPPORT
-        char pin      = byte2 - 1;
-        char velocity = byte3;
-        if (velocity > 0) {
-          handleNoteOn(pin, velocity);
-        } else {
-          handleNoteOff(pin);
+        uint8_t pin      = byte2 - 1;
+        uint8_t velocity = byte3;
+        if (pin < OUTPUT_PINS_COUNT) {
+          if (velocity > 0) {
+            handleNoteOn(pin, velocity);
+          } else {
+            handleNoteOff(pin);
+          }
         }
 #endif
       }

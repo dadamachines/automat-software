@@ -87,6 +87,7 @@ Managed automatically by PlatformIO (declared in `platformio.ini`):
 
 ## Change log
 
+- V3.02 — Fix I2C message validation, pin bounds checks, PWMManager array bug
 - V3.01 — Version bump, named UF2 output, README updates
 - V3.00 — PlatformIO migration, Adafruit SAMD core, UF2 output
 - V1.10 2018.04.15 — Velocity support added
