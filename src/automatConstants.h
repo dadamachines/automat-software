@@ -34,7 +34,7 @@
 #define AUTOMAT_MINI 0
 #define SIS_SUPPORT 1
 
-const int SYSEX_FIRMWARE_VERSION = 0x03110000; // = version 3.11
+const int SYSEX_FIRMWARE_VERSION = 0x03000B00; // = version 3.11.0
 
 #if AUTOMAT_MINI
 const int OUTPUT_PINS_COUNT = 6; //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
