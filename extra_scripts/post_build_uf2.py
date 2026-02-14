@@ -71,8 +71,8 @@ def post_build_uf2(source, target, env):
     firmware_bin = os.path.join(
         env.subst("$BUILD_DIR"), env.subst("${PROGNAME}.bin")
     )
-    # Named UF2: automat-sw_<version>.ino.automat.uf2
-    uf2_name = f"automat-sw_{FIRMWARE_VERSION}.ino.automat.uf2"
+    # Named UF2: automat-sw_<version>.automat.uf2
+    uf2_name = f"automat-sw_{FIRMWARE_VERSION}.automat.uf2"
     firmware_uf2 = os.path.join(env.subst("$BUILD_DIR"), uf2_name)
 
     if os.path.isfile(firmware_bin):

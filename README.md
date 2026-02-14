@@ -30,7 +30,7 @@ pio run
 
 After a successful build the firmware files are in `.pio/build/automat/`:
 - `firmware.bin` — raw binary
-- `automat-sw_<version>.ino.automat.uf2` — UF2 file for drag-and-drop flashing
+- `automat-sw_<version>.automat.uf2` — UF2 file for drag-and-drop flashing
 
 ### Upload via SAM-BA (serial)
 
@@ -42,7 +42,7 @@ pio run -t upload
 
 1. Double-tap the reset button on the automat to enter the UF2 bootloader.
 2. A USB drive named `AUTOMAT` will appear.
-3. Drag `firmware.uf2` onto that drive.
+3. Drag `automat-sw_<version>.automat.uf2` onto that drive.
 4. The board resets automatically and runs the new firmware.
 
 > **Note:** UF2 flashing requires the [dadamachines UF2 bootloader](https://github.com/dadamachines/uf2-samdx1/tree/dadamachines). If your automat still has the original SAM-BA-only bootloader, use `pio run -t upload` instead, or flash the UF2 bootloader once via SWD/JTAG.
