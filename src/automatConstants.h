@@ -34,7 +34,7 @@
 #define AUTOMAT_MINI 0
 #define SIS_SUPPORT 1
 
-const int SYSEX_FIRMWARE_VERSION = 0x03100000; // = version 3.10
+const int SYSEX_FIRMWARE_VERSION = 0x03110000; // = version 3.11
 
 #if AUTOMAT_MINI
 const int OUTPUT_PINS_COUNT = 6; //= sizeof(OUTPUT_PINS) / sizeof(OUTPUT_PINS[0]);
@@ -53,29 +53,10 @@ const int ALWAYS_ON_PROGRAM         = 1; // The index of the always on (note on/
 const int MIN_PROGRAM               = 0; // The index of the minimum valid program
 
 enum {
-  MIDI_CC_MOD_WHEEL         = 1,
-  MIDI_CC_GENERAL_PURPOSE_1 = 16,
-  MIDI_CC_GENERAL_PURPOSE_2 = 17,
-  MIDI_CC_ALL_NOTES_OFF     = 123
+  MIDI_CC_ALL_NOTES_OFF = 123
 };
 
-const int MAX_MIN_INFINITE   = 0;
+const int MAX_MIN_INFINITE = 0;
 
+const int MAX_PROGRAM    = 1; // Only MAX_MIN (0) and ALWAYS_ON (1) are active
 const int MAX_MIDI_CHANNEL = 16;
-
-// disable the PWM_SUPPORT by default.   Don't include it as part of the
-// official releases If you turn this feature on and upload it to your automat,
-// you assume all responsibility for any impact it may have on the automat
-// hardware
-#define PWM_SUPPORT 0
-
-#if PWM_SUPPORT
-/* programs 5 to 7 are reserved by the PWMManager */
-const int PWM_PROGRAM       = 5; // The index of the pwm multi-pulse program
-const int PWM_MOTOR_PROGRAM = 6; // The index of the pwm continous program
-const int HUM_MOTOR_PROGRAM = 7; // The index of the making the motor hum to a note
-
-const int MAX_PROGRAM = 7; // The index of the maximum valid program
-#else
-const int MAX_PROGRAM = 1; // Only MAX_MIN (0) and ALWAYS_ON (1) are active
-#endif

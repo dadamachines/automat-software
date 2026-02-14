@@ -64,7 +64,7 @@ def convert_bin_to_uf2(bin_path, uf2_path):
 
 
 # Firmware version for the output filename (keep in sync with automatConstants.h)
-FIRMWARE_VERSION = "3.1.0"
+FIRMWARE_VERSION = "3.1.1"
 
 
 def post_build_uf2(source, target, env):

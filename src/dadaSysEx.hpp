@@ -272,11 +272,7 @@ void dadaSysEx::saveConfigToSysEx() {
 
   *outP++ = 0;
 
-#if PWM_SUPPORT
-  *outP++ = 1;
-#else
   *outP++ = 0;
-#endif
 
   *outP++ = 0;
 
@@ -366,11 +362,7 @@ void dadaSysEx::sendVersionToSysEx() {
 
   outP = putIntToArray(outP, SYSEX_FIRMWARE_VERSION);
 
-#if PWM_SUPPORT
-  outP = putIntToArray(outP, 0x010000 | OUTPUT_PINS_COUNT);
-#else
   outP = putIntToArray(outP, OUTPUT_PINS_COUNT);
-#endif
 
   *outP = SYSEX_END;
 

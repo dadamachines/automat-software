@@ -78,16 +78,15 @@ Managed automatically by PlatformIO (declared in `platformio.ini`):
 │   ├── solenoidSPI.*           # Shift-register solenoid driver
 │   ├── dadaMidiLearn.h         # MIDI learn mode
 │   ├── dadaStatusLED.h         # Status LED controller
-│   ├── dadaSysEx.*             # SysEx configuration protocol
-│   ├── PWMManager.*            # PWM velocity control
-│   └── humTiming.h             # Motor hum timing
+│   └── dadaSysEx.*             # SysEx configuration protocol
 └── extra_scripts/
     └── post_build_uf2.py       # Automatic .bin → .uf2 conversion
 ```
 
 ## Change log
 
-- V3.10 — Simplify velocity programs: only Default (velocity-mapped timing) and NoteOn/NoteOff (always-on) remain active; deprecated Quadratic, Inverse Quadratic, and Fixed Gate programs are remapped on boot; SysEx/WebUI compatibility preserved
+- V3.11 — Remove all PWM/motor code and files (PWMManager, humTiming); remove pitch bend and mod wheel handlers; clean up unused constants
+- V3.10 — Simplify velocity programs: only Default (velocity-mapped timing) and NoteOn/NoteOff (always-on) remain active; SysEx/WebUI compatibility preserved
 - V3.02 — Fix I2C message validation, pin bounds checks, PWMManager array bug
 - V3.01 — Version bump, named UF2 output, README updates
 - V3.00 — PlatformIO migration, Adafruit SAMD core, UF2 output

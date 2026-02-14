@@ -23,9 +23,7 @@ void handleStart();
 void handleStop();
 void handleContinue();
 void handleControlChange(byte channel, byte number, byte value);
-void handleModWheel(byte channel, byte mod);
 void handleAllNotesOff();
-void handlePitchBend(byte channel, int bend);
 void handleSysEx(byte *arr, unsigned len);
 void handleProgramChange(byte channel, byte patch);
 void handleMinConfig(byte pin, int val, int power);
@@ -75,9 +73,6 @@ int32_t max_min_map[OUTPUT_PINS_COUNT][128];
 #include "solenoidSPI.h"
 SOLSPI solenoids(&SPI, 30);
 
-#include "PWMManager.h"
-#include "PWMManager.hpp"
-
 #include "dadaStatusLED.h"
 dadaStatusLED statusLED(ACTIVITY_LED);
 
@@ -120,7 +115,6 @@ void setup() {
   midi2.setHandleNoteOff(handleNoteOff);
   midi2.setHandleSystemExclusive(handleSysEx);
   midi2.setHandleControlChange(handleControlChange);
-  midi2.setHandlePitchBend(handlePitchBend);
   midi2.setHandleClock(handleClock);
   midi2.setHandleStart(handleStart);
   midi2.setHandleStop(handleStop);
@@ -161,13 +155,6 @@ void loop() {
           milli_stop[i] = 0;
         }
         break;
-#if PWM_SUPPORT
-      case PWM_PROGRAM:
-      case PWM_MOTOR_PROGRAM:
-      case HUM_MOTOR_PROGRAM:
-        PWMManager::handlePinLoop(i, velocity_program);
-        break;
-#endif
       case ALWAYS_ON_PROGRAM:
       default:
         break;
@@ -203,16 +190,6 @@ void loop() {
           case 0xC0: // program change
             handleProgramChange(1 + (rx.byte1 & 0xF), rx.byte2);
             break;
-
-          case 0xE0: // pitch wheel
-          {
-            int p14bit;
-            p14bit = (unsigned short)rx.byte3 & 0x7F;
-            p14bit <<= 7;
-            p14bit |= (unsigned short)rx.byte2 & 0x7F;
-            handlePitchBend(1 + (rx.byte1 & 0xF), p14bit - 8192);
-            break;
-          }
 
           case SYSEX_START: // SystemExclusive
             switch (rx.byte1) {
@@ -290,14 +267,6 @@ void handleNoteOn(byte pin, byte velocity) {
       break;
     }
 
-#if PWM_SUPPORT
-    case PWM_PROGRAM:       // true pwm
-    case PWM_MOTOR_PROGRAM: // continuous PWM
-    case HUM_MOTOR_PROGRAM:
-      PWMManager::handleNoteOn(velocity_program, pin, velocity);
-      break;
-#endif
-
     case ALWAYS_ON_PROGRAM:
     default: // no velocity control
       break;
@@ -318,12 +287,6 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOn(i, velocity);
       }
-#if PWM_SUPPORT
-    } else if (programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM &&
-               nvData.midiChannels[i] == channel) {
-      PWMManager::handleHumNoteOn(i, note);
-      handleNoteOn(i, velocity);
-#endif
     }
   }
 }
@@ -331,9 +294,6 @@ void handleNoteOn(byte channel, byte note, byte velocity) {
 void handleNoteOff(byte pin) {
   solenoids.clearOutput(pin);
   milli_stop[pin] = 0;
-#if PWM_SUPPORT
-  PWMManager::handleNoteOff(pin);
-#endif
 }
 
 void handleNoteOff(byte channel, byte note, byte velocity) {
@@ -350,13 +310,6 @@ void handleNoteOff(byte channel, byte note, byte velocity) {
       if (nvData.midiChannels[i] == channel || nvData.midiChannels[i] == MIDI_CHANNEL_OMNI) {
         handleNoteOff(i);
       }
-#if PWM_SUPPORT
-    } else if ((programData.velocityConfig.velocityProgram[i] == HUM_MOTOR_PROGRAM) &&
-               (nvData.midiChannels[i] == channel)) {
-      if (PWMManager::handleHumNoteOff(i, note)) {
-        handleNoteOff(i);
-      }
-#endif
     }
   }
 }
@@ -397,29 +350,16 @@ void handleStop() {
 
 void handleControlChange(byte channel, byte number, byte value) {
   switch (number) {
-    case MIDI_CC_MOD_WHEEL:
-      handleModWheel(channel, value);
-      break;
     case MIDI_CC_ALL_NOTES_OFF:
       handleAllNotesOff();
       break;
   }
 }
 
-void handleModWheel(byte channel, byte mod) {
-#if PWM_SUPPORT
-  PWMManager::handleModWheel(channel, mod);
-#endif
-}
-
 void handleAllNotesOff() {
   for (int i = 0; i < OUTPUT_PINS_COUNT; i++) {
     handleNoteOff(i);
   }
-
-#if PWM_SUPPORT
-  PWMManager::handleAllNotesOff();
-#endif
 }
 
 void handleMinConfig(byte pin, int val, int power) {
@@ -450,12 +390,6 @@ void handleMaxConfig(byte pin, int val, int power) {
                   programData.velocityConfig.curve_power[pin]);
     statusLED.blink(1, 2, 1);
   }
-}
-
-void handlePitchBend(byte channel, int bend) {
-#if PWM_SUPPORT
-  PWMManager::handlePitchBend(channel, bend);
-#endif
 }
 
 void requestI2CEvent() {
