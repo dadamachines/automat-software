@@ -1,41 +1,14 @@
-# Ignore UF2 Converstion Tool
-uf2conv.py
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
 
-# Ignore list for Eagle, a PCB layout tool
-
-# Backup files
-*.s#?
-*.b#?
-*.l#?
-
-# Eagle project file
-# It contains a serial number and references to the file structure
-# on your computer.
-# comment the following line if you want to have your project file included.
-eagle.epf
-
-# CAM files
-*.$$$
-*.cmp
-*.ly2
-*.l15
-*.sol
-*.plc
-*.stc
-*.sts
-*.crc
-*.crs
-
-*.dri
-*.drl
-*.gpi
-*.pls
-
-*.drd
-*.drd.*
-
-*.info
-
-*.eps
+# macOS
 .DS_Store
-.vscode
+
+# VS Code
+.vscode/
+
+# Local proposal / notes (not part of the release)
+PROPOSAL-platformio-migration.md
+SAFETY-CLAMP-PROPOSAL.md
